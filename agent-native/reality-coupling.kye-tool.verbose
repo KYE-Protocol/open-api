@@ -1,10 +1,10 @@
 @kye-tool v1
 @spec reality-coupling.openapi.v1
-@source-sha256 6515e75e0ac5057c98c5f9457bf4a2e92465d4495aec289bfb4d8b1557aedc7c
-@compiled-at 2026-05-16T15:19:04Z
+@source-sha256 92bc9de626f542f022e173992b4ec754114d24a5aef2b46a68c39baefba99e09
+@compiled-at 2026-08-03T14:33:37Z
 @kid kye:key:agent-tool-signing:dev
 @sig DEV-NOT-FOR-PRODUCTION
-@base https://kye-admin.example
+@base https://admin.kyeprotocol.com
 @auth bearer JWT
 @endpoints 25
 

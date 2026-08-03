@@ -7,7 +7,7 @@ info:
     transition events, querying the State Registry, and listing state transitions.
 
 servers:
-  - url: https://kye.example
+  - url: https://api.kyeprotocol.com
     description: Reference KYE deployment
 
 security:

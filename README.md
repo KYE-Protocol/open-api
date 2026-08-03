@@ -28,20 +28,24 @@ Request and response bodies reference the JSON Schemas published at
 
 ## Status of the agent-native packs
 
-The `.kye-tool` files in `agent-native/` are **development-signed**. Each pack
-carries `@kid kye:key:agent-tool-signing:dev` and `@sig
-DEV-NOT-FOR-PRODUCTION`, and several declare a placeholder `@base
-https://kye.example`.
+The `.kye-tool` files in `agent-native/` are **development-signed**: each carries
+`@kid kye:key:agent-tool-signing:dev` and `@sig DEV-NOT-FOR-PRODUCTION`, because
+the production signing key is held only in CI. Treat the signature line as
+absent, not as something you can verify — the pack format and contents are
+real, the signature is not.
 
-Treat them as a **structural preview of the pack format**, not as a
-signature you can verify or a base URL you can call. They are published because
-the mirror is faithful to `public/openapi` rather than curated — hiding them
-would misrepresent what the public surface contains. Production-signed packs
-will replace them under a real key id; until then, do not build a trust
-decision on their signature line.
+Their `@base` is correct and production-bound. (Until 2026-08-03 six specs, and
+the packs compiled from them, declared reserved-TLD placeholder hosts —
+`kye.example`, `kye-app.example`, `kye-admin.example` — while the same
+`servers:` blocks already named the real hosts. Fixed at source; an agent
+following a pack now reaches a host that exists.)
 
-The `.yaml` OpenAPI documents alongside them are unaffected by this and are the
-authoritative contract.
+The dev-signature is tracked as a measured, decreases-only ratchet in the master
+repository rather than a prose note, so the count cannot drift from reality, and
+production-signed packs will replace these.
+
+The `.yaml` OpenAPI documents alongside them are unaffected by any of this and
+are the authoritative contract.
 
 ## What is here — and what is deliberately not
 

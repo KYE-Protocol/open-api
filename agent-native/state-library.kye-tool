@@ -1,10 +1,10 @@
 @kye-tool v1
 @spec state-library.openapi.v1
-@source-sha256 09a93103462e546f79ce2d32b5e50dc89d834c93ee47a9ee17625ad4e1c3f36f
-@compiled-at 2026-05-16T15:19:04Z
+@source-sha256 e69b7dd2c56c8814f10a1b5b6e0e8923d0be5a0b381ba43a652bdf2d66fce0aa
+@compiled-at 2026-08-03T14:33:37Z
 @kid kye:key:agent-tool-signing:dev
 @sig DEV-NOT-FOR-PRODUCTION
-@base https://kye.example
+@base https://api.kyeprotocol.com
 @auth bearer token
 @endpoints 2
 

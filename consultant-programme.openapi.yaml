@@ -16,9 +16,9 @@ info:
     Base path: /api/v1/ (admin + cloud) and /api/ (public site).
 
 servers:
-  - url: https://kye-admin.example
+  - url: https://admin.kyeprotocol.com
     description: KYE Admin Console (owner-gated; cross-tenant authoring)
-  - url: https://kye-app.example
+  - url: https://app.kyeprotocol.com
     description: KYE Cloud (tenant-scoped read-only)
   - url: https://kyeprotocol.com
     description: KYE marketing site (public lead capture only)

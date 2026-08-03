@@ -1,7 +1,7 @@
 @kye-tool v1
 @spec data-governance.openapi.v1
 @source-sha256 562ba3a400fbb7032eef2af25c72d673b240435f4e83ac427243704c905c0179
-@compiled-at 2026-05-16T15:19:04Z
+@compiled-at 2026-08-03T14:33:37Z
 @kid kye:key:agent-tool-signing:dev
 @sig DEV-NOT-FOR-PRODUCTION
 @base https://gateway.kyeprotocol.com

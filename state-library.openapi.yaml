@@ -8,7 +8,7 @@ info:
     insurance, healthcare, pharma, logistics, energy, regtech, and AI governance.
 
 servers:
-  - url: https://kye.example
+  - url: https://api.kyeprotocol.com
     description: Reference KYE deployment
 
 security:

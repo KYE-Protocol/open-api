@@ -1,0 +1,24 @@
+@kye-tool v1
+@spec native-engines.openapi.v1
+@source-sha256 2a1e5400018109c44f57760147b3db9288b7d7963a50994ea858df23ca9f1fe1
+@compiled-at 2026-08-03T14:33:37Z
+@kid kye:key:agent-tool-signing:dev
+@sig DEV-NOT-FOR-PRODUCTION
+@base https://api.kyeprotocol.com
+@auth bearer tenant-token
+@endpoints 12
+
+GET /v1/data-flow nativeEngines.dataFlowList @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+POST /v1/data-flow nativeEngines.dataFlowSeal @auth=inherit @purpose=Operate.Read | ∅ -> object
+GET /v1/memory nativeEngines.memoryList @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+POST /v1/memory nativeEngines.memoryPut @auth=inherit @purpose=Operate.Read | body:Body -> object
+POST /v1/memory/forget nativeEngines.memoryForget @auth=inherit @purpose=Operate.Read | ∅ -> opaque
+POST /v1/memory/recall nativeEngines.memoryRecall @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+GET /v1/reports nativeEngines.reportList @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+POST /v1/reports nativeEngines.reportGenerate @auth=inherit @purpose=Operate.Read | body:Body -> object
+GET /v1/reports/{report_id} nativeEngines.reportGet @auth=inherit @purpose=Operate.Read @idempotent | report_id:string -> object
+POST /v1/reports/{report_id}/deliver nativeEngines.reportDeliver @auth=inherit @purpose=Operate.Read | report_id:string; body:Body -> opaque
+POST /v1/search nativeEngines.search @auth=inherit @purpose=Operate.Read | body:Body -> object
+GET /v1/search/runs nativeEngines.searchRuns @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+
+@end

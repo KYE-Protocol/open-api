@@ -1,0 +1,37 @@
+@kye-tool v1
+@spec native-engines.openapi.v1
+@source-sha256 2a1e5400018109c44f57760147b3db9288b7d7963a50994ea858df23ca9f1fe1
+@compiled-at 2026-08-03T14:33:37Z
+@kid kye:key:agent-tool-signing:dev
+@sig DEV-NOT-FOR-PRODUCTION
+@base https://api.kyeprotocol.com
+@auth bearer tenant-token
+@endpoints 12
+
+GET /v1/data-flow nativeEngines.dataFlowList @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+POST /v1/data-flow nativeEngines.dataFlowSeal @auth=inherit @purpose=Operate.Read | ∅ -> object
+GET /v1/memory nativeEngines.memoryList @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+POST /v1/memory nativeEngines.memoryPut @auth=inherit @purpose=Operate.Read | body:Body -> object
+POST /v1/memory/forget nativeEngines.memoryForget @auth=inherit @purpose=Operate.Read | ∅ -> opaque
+POST /v1/memory/recall nativeEngines.memoryRecall @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+GET /v1/reports nativeEngines.reportList @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+POST /v1/reports nativeEngines.reportGenerate @auth=inherit @purpose=Operate.Read | body:Body -> object
+GET /v1/reports/{report_id} nativeEngines.reportGet @auth=inherit @purpose=Operate.Read @idempotent | report_id:string -> object
+POST /v1/reports/{report_id}/deliver nativeEngines.reportDeliver @auth=inherit @purpose=Operate.Read | report_id:string; body:Body -> opaque
+POST /v1/search nativeEngines.search @auth=inherit @purpose=Operate.Read | body:Body -> object
+GET /v1/search/runs nativeEngines.searchRuns @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+
+@hint nativeEngines.dataFlowList List recent data-flow seals for the caller tenant.
+@hint nativeEngines.dataFlowSeal Trigger a fresh signed data-flow graph seal.
+@hint nativeEngines.memoryList List the caller tenant's non-forgotten memory records.
+@hint nativeEngines.memoryPut Write a signed agent-memory record.
+@hint nativeEngines.memoryForget Tombstone a memory record (WORM-preserved deletion).
+@hint nativeEngines.memoryRecall Recall under a declared purpose; cross-purpose reads are denied.
+@hint nativeEngines.reportList List the caller tenant's recent reports.
+@hint nativeEngines.reportGenerate Generate a signed per-framework compliance report.
+@hint nativeEngines.reportGet Fetch one signed report envelope by id.
+@hint nativeEngines.reportDeliver Auto-deliver a report envelope via the `reports@`-routed mail flow.
+@hint nativeEngines.search Run a tenant-scoped query against the native search engine.
+@hint nativeEngines.searchRuns List the caller tenant's last 100 search runs (WORM-persisted).
+
+@end

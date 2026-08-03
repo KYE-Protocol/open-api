@@ -1,10 +1,10 @@
 @kye-tool v1
 @spec consultant-programme.openapi.v1
-@source-sha256 1f728ba05a8e95e0da87ef47c5175713eff995061cfecd44ad0239c93b29f68a
-@compiled-at 2026-05-16T15:19:04Z
+@source-sha256 e78b9fad38af2d3da459069e51ecd266bd5d2d49743eb7686f49cc442cb0d5d5
+@compiled-at 2026-08-03T14:33:37Z
 @kid kye:key:agent-tool-signing:dev
 @sig DEV-NOT-FOR-PRODUCTION
-@base https://kye-admin.example
+@base https://admin.kyeprotocol.com
 @auth bearer JWT
 @endpoints 37
 
@@ -15,7 +15,7 @@ GET /api/v1/app/consultant-tenant-links/{id} getTenantLinkForTenant @auth=inheri
 GET /api/v1/app/consultants listConsultantsForTenant @auth=inherit @purpose=Operate.Read @idempotent | level:string?,sector:string?,limit:integer? -> object
 GET /api/v1/app/consultants/{id} getConsultantForTenant @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
 GET /api/v1/app/white-label-config getWhiteLabelConfigForTenant @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
-GET /api/v1/consultant-certifications listCertifications @auth=inherit @purpose=Operate.Read @idempotent | consultant_id:string?,level:string?,programme:string? -> object
+GET /api/v1/consultant-certifications listCertifications @auth=inherit @purpose=Operate.Read @idempotent | consultant_id:string?,level:string?,program:string? -> object
 POST /api/v1/consultant-certifications createCertification @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
 GET /api/v1/consultant-certifications/{id} getCertification @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
 PATCH /api/v1/consultant-certifications/{id} updateCertification @auth=inherit @purpose=Operate.Update | body:Body -> object
