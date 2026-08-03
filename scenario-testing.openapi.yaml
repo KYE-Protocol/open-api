@@ -1,0 +1,950 @@
+openapi: 3.1.0
+info:
+  title: KYE Protocol™ — Scenario Testing™ + Approval Brief™ API
+  version: 1.0.0
+  description: |
+    Admin authoring (owner-gated) and tenant-scoped read endpoints for the
+    KYE Scenario Testing™ + Approval Brief™ surface.
+
+    All POST endpoints accept an `Idempotency-Key` header; if present, the
+    response is cached per (tenant_id, scope, key) and returned verbatim
+    on retry. Soft-delete only — `deleted_at` is set; the row is never
+    physically removed.
+
+    Base path: /api/v1/
+
+servers:
+  - url: https://kye-admin.example
+    description: KYE Admin Console (owner-gated; cross-tenant authoring)
+  - url: https://kye-app.example
+    description: KYE Cloud (tenant-scoped read-only)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: scenario-testing
+    description: KYE Scenario Testing™ — scenarios, runs, stress tests, consequence maps.
+  - name: approval-brief
+    description: KYE Approval Brief™ — briefs, knowledge snapshots, decisions, evidence packs.
+
+paths:
+
+  # =========================================================================
+  # Scenarios
+  # =========================================================================
+  /api/v1/scenarios:
+    get:
+      tags: [scenario-testing]
+      operationId: listScenarios
+      summary: List scenarios
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: run_mode,  in: query, schema: { type: string, enum: [what_if, stress_test, blast_radius, future_state, revocation_impact, approval_risk] } }
+        - { name: status,    in: query, schema: { type: string, enum: [draft, active, archived] } }
+        - { name: q,         in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioList' } } } } }
+    post:
+      tags: [scenario-testing]
+      operationId: createScenario
+      summary: Create a scenario (admin)
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioCreate' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioEnvelope' } } } }
+        '400': { description: Validation error }
+  /api/v1/scenarios/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [scenario-testing]
+      operationId: getScenario
+      summary: Fetch a scenario
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [scenario-testing]
+      operationId: updateScenario
+      summary: Update a scenario (admin)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioEnvelope' } } } } }
+    delete:
+      tags: [scenario-testing]
+      operationId: softDeleteScenario
+      summary: Soft-delete a scenario (admin)
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+
+  # =========================================================================
+  # Scenario Runs
+  # =========================================================================
+  /api/v1/scenario-runs:
+    get:
+      tags: [scenario-testing]
+      operationId: listScenarioRuns
+      summary: List scenario runs
+      parameters:
+        - { name: tenant_id,    in: query, schema: { type: string } }
+        - { name: scenario_id,  in: query, schema: { type: string } }
+        - { name: run_mode,     in: query, schema: { type: string } }
+        - { name: since,        in: query, schema: { type: string, format: date-time } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioRunList' } } } } }
+    post:
+      tags: [scenario-testing]
+      operationId: createScenarioRun
+      summary: Queue a scenario run (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioRunCreate' } } } }
+      responses: { '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioRunEnvelope' } } } } }
+  /api/v1/scenario-runs/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [scenario-testing]
+      operationId: getScenarioRun
+      summary: Fetch a scenario run
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioRunEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [scenario-testing]
+      operationId: updateScenarioRun
+      summary: Update a scenario run outcome (admin / runner)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioRunPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioRunEnvelope' } } } } }
+    delete:
+      tags: [scenario-testing]
+      operationId: softDeleteScenarioRun
+      summary: Soft-delete a scenario run (admin)
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/scenario-runs/{id}/rerun:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [scenario-testing]
+      operationId: rerunScenarioRun
+      summary: Replay a scenario run (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      responses: { '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/ScenarioRunEnvelope' } } } } }
+  /api/v1/scenario-runs/{id}/generate-evidence:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [scenario-testing, approval-brief]
+      operationId: generateEvidenceFromRun
+      summary: Create an approval evidence pack from a scenario run (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      responses: { '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalEvidencePackEnvelope' } } } } }
+
+  # =========================================================================
+  # Stress Tests
+  # =========================================================================
+  /api/v1/stress-tests:
+    get:
+      tags: [scenario-testing]
+      operationId: listStressTests
+      summary: List stress tests (admin)
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: status,    in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StressTestList' } } } } }
+    post:
+      tags: [scenario-testing]
+      operationId: createStressTest
+      summary: Create a stress test (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StressTestCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/StressTestEnvelope' } } } } }
+  /api/v1/stress-tests/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [scenario-testing]
+      operationId: getStressTest
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StressTestEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [scenario-testing]
+      operationId: updateStressTest
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StressTestPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StressTestEnvelope' } } } } }
+    delete:
+      tags: [scenario-testing]
+      operationId: softDeleteStressTest
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/stress-tests/{id}/rerun:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [scenario-testing]
+      operationId: rerunStressTest
+      summary: Execute a stress test (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      responses: { '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/StressTestRerunResponse' } } } } }
+
+  # =========================================================================
+  # Stressors (admin-only library)
+  # =========================================================================
+  /api/v1/stressors:
+    get:
+      tags: [scenario-testing]
+      operationId: listStressors
+      summary: List stressor library entries (admin)
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: category,  in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StressorList' } } } } }
+    post:
+      tags: [scenario-testing]
+      operationId: createStressor
+      summary: Create a stressor library entry (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StressorCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/StressorEnvelope' } } } } }
+  /api/v1/stressors/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [scenario-testing]
+      operationId: getStressor
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StressorEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [scenario-testing]
+      operationId: updateStressor
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StressorPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StressorEnvelope' } } } } }
+    delete:
+      tags: [scenario-testing]
+      operationId: softDeleteStressor
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+
+  # =========================================================================
+  # Consequence Maps
+  # =========================================================================
+  /api/v1/consequence-maps:
+    get:
+      tags: [scenario-testing]
+      operationId: listConsequenceMaps
+      summary: List consequence maps (admin)
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: scenario_run_id, in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConsequenceMapList' } } } } }
+    post:
+      tags: [scenario-testing]
+      operationId: createConsequenceMap
+      summary: Create a consequence map (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConsequenceMapCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ConsequenceMapEnvelope' } } } } }
+  /api/v1/consequence-maps/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [scenario-testing]
+      operationId: getConsequenceMap
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConsequenceMapEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [scenario-testing]
+      operationId: updateConsequenceMap
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConsequenceMapPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConsequenceMapEnvelope' } } } } }
+    delete:
+      tags: [scenario-testing]
+      operationId: softDeleteConsequenceMap
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/consequence-maps/{id}/verify:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [scenario-testing]
+      operationId: verifyConsequenceMap
+      summary: Verify the signature on a consequence map (admin)
+      responses:
+        '200': { description: Verified, content: { application/json: { schema: { $ref: '#/components/schemas/VerifyResponse' } } } }
+        '422': { description: Verification failed }
+
+  # =========================================================================
+  # Approval Briefs
+  # =========================================================================
+  /api/v1/approval-briefs:
+    get:
+      tags: [approval-brief]
+      operationId: listApprovalBriefs
+      summary: List approval briefs
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: approver,  in: query, schema: { type: string } }
+        - { name: status,    in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalBriefList' } } } } }
+    post:
+      tags: [approval-brief]
+      operationId: createApprovalBrief
+      summary: Create an approval brief (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalBriefCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalBriefEnvelope' } } } } }
+  /api/v1/approval-briefs/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [approval-brief]
+      operationId: getApprovalBrief
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalBriefEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [approval-brief]
+      operationId: updateApprovalBrief
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalBriefPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalBriefEnvelope' } } } } }
+    delete:
+      tags: [approval-brief]
+      operationId: softDeleteApprovalBrief
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/approval-briefs/{id}/viewed:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [approval-brief]
+      operationId: markApprovalBriefViewed
+      summary: Mark a brief as viewed (idempotent)
+      responses: { '200': { description: OK } }
+  /api/v1/approval-briefs/{id}/acknowledge:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [approval-brief]
+      operationId: acknowledgeApprovalBrief
+      summary: Approver acknowledges the brief (idempotent)
+      responses: { '200': { description: OK } }
+
+  # =========================================================================
+  # Approver Knowledge Snapshots
+  # =========================================================================
+  /api/v1/approver-knowledge-snapshots:
+    get:
+      tags: [approval-brief]
+      operationId: listApproverKnowledgeSnapshots
+      summary: List approver knowledge snapshots (admin)
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: approver,  in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApproverKnowledgeSnapshotList' } } } } }
+    post:
+      tags: [approval-brief]
+      operationId: createApproverKnowledgeSnapshot
+      summary: Create an approver knowledge snapshot (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApproverKnowledgeSnapshotCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApproverKnowledgeSnapshotEnvelope' } } } } }
+  /api/v1/approver-knowledge-snapshots/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [approval-brief]
+      operationId: getApproverKnowledgeSnapshot
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApproverKnowledgeSnapshotEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [approval-brief]
+      operationId: updateApproverKnowledgeSnapshot
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApproverKnowledgeSnapshotPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApproverKnowledgeSnapshotEnvelope' } } } } }
+    delete:
+      tags: [approval-brief]
+      operationId: softDeleteApproverKnowledgeSnapshot
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/approver-knowledge-snapshots/{id}/verify:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [approval-brief]
+      operationId: verifyApproverKnowledgeSnapshot
+      responses:
+        '200': { description: Verified, content: { application/json: { schema: { $ref: '#/components/schemas/VerifyResponse' } } } }
+        '422': { description: Verification failed }
+
+  # =========================================================================
+  # Approval Decisions
+  # =========================================================================
+  /api/v1/approval-decisions:
+    get:
+      tags: [approval-brief]
+      operationId: listApprovalDecisions
+      summary: List approval decisions
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: approver,  in: query, schema: { type: string } }
+        - { name: decision,  in: query, schema: { type: string } }
+        - { name: since,     in: query, schema: { type: string, format: date-time } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecisionList' } } } } }
+    post:
+      tags: [approval-brief]
+      operationId: createApprovalDecision
+      summary: Record an approval decision (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecisionCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecisionEnvelope' } } } } }
+  /api/v1/approval-decisions/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [approval-brief]
+      operationId: getApprovalDecision
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecisionEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [approval-brief]
+      operationId: updateApprovalDecision
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecisionPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecisionEnvelope' } } } } }
+    delete:
+      tags: [approval-brief]
+      operationId: softDeleteApprovalDecision
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/approval-decisions/{id}/revoke:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [approval-brief]
+      operationId: revokeApprovalDecision
+      summary: Revoke an approval decision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 4, maxLength: 1000 }
+      responses: { '200': { description: OK } }
+  /api/v1/approval-decisions/{id}/expire:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [approval-brief]
+      operationId: expireApprovalDecision
+      summary: Mark an approval decision expired (idempotent)
+      responses: { '200': { description: OK } }
+
+  # =========================================================================
+  # Approval Evidence Packs
+  # =========================================================================
+  /api/v1/approval-evidence-packs:
+    get:
+      tags: [approval-brief]
+      operationId: listApprovalEvidencePacks
+      summary: List approval evidence packs
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: approval_brief_id, in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalEvidencePackList' } } } } }
+    post:
+      tags: [approval-brief]
+      operationId: createApprovalEvidencePack
+      summary: Create an approval evidence pack (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalEvidencePackCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalEvidencePackEnvelope' } } } } }
+  /api/v1/approval-evidence-packs/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [approval-brief]
+      operationId: getApprovalEvidencePack
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalEvidencePackEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [approval-brief]
+      operationId: updateApprovalEvidencePack
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalEvidencePackPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalEvidencePackEnvelope' } } } } }
+    delete:
+      tags: [approval-brief]
+      operationId: softDeleteApprovalEvidencePack
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/approval-evidence-packs/{id}/verify:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [approval-brief]
+      operationId: verifyApprovalEvidencePack
+      responses:
+        '200': { description: Verified, content: { application/json: { schema: { $ref: '#/components/schemas/VerifyResponse' } } } }
+        '422': { description: Verification failed }
+  /api/v1/approval-evidence-packs/{id}/export:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [approval-brief]
+      operationId: exportApprovalEvidencePack
+      summary: Download a self-contained JSON bundle of the evidence pack
+      responses:
+        '200':
+          description: Bundle
+          content:
+            application/json:
+              schema: { type: object }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    KyeId:
+      type: string
+      pattern: '^kye:[a-z-]+:[A-Za-z0-9._:-]+$'
+
+    Signature:
+      type: object
+      required: [alg, kid, value_b64]
+      properties:
+        alg: { type: string, enum: [EdDSA] }
+        kid: { type: string, minLength: 1, maxLength: 256 }
+        value_b64: { type: string, minLength: 1, maxLength: 1024 }
+
+    TargetObject:
+      type: object
+      required: [object_id, object_schema]
+      properties:
+        object_id: { $ref: '#/components/schemas/KyeId' }
+        object_schema: { type: string, minLength: 1, maxLength: 256 }
+
+    SoftDeleteResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        id: { type: string }
+        deleted_at: { type: string, format: date-time }
+
+    VerifyResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        id: { type: string }
+        verified: { type: boolean }
+        verified_at: { type: string, format: date-time }
+
+    Scenario:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        version: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        run_mode: { type: string, enum: [what_if, stress_test, blast_radius, future_state, revocation_impact, approval_risk] }
+        target_object_id: { type: string }
+        target_object_schema: { type: string }
+        status: { type: string, enum: [draft, active, archived] }
+        tags: { type: array, items: { type: string } }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_at: { type: string, format: date-time }
+    ScenarioCreate:
+      type: object
+      required: [tenant_id, name, run_mode, target_object]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        name: { type: string, minLength: 1, maxLength: 256 }
+        description: { type: string, maxLength: 4096 }
+        run_mode: { type: string, enum: [what_if, stress_test, blast_radius, future_state, revocation_impact, approval_risk] }
+        target_object: { $ref: '#/components/schemas/TargetObject' }
+        inputs: { type: object }
+        stressors: { type: array, items: { type: object } }
+        validity:
+          type: object
+          properties:
+            not_before: { type: string, format: date-time }
+            not_after: { type: string, format: date-time }
+        tags: { type: array, items: { type: string } }
+    ScenarioPatch:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [draft, active, archived] }
+        tags: { type: array, items: { type: string } }
+        inputs: { type: object }
+        stressors: { type: array, items: { type: object } }
+    ScenarioEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        scenario: { $ref: '#/components/schemas/Scenario' }
+    ScenarioList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        scenarios: { type: array, items: { $ref: '#/components/schemas/Scenario' } }
+
+    ScenarioRun:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        scenario_id: { $ref: '#/components/schemas/KyeId' }
+        run_mode: { type: string }
+        status: { type: string, enum: [queued, running, succeeded, failed, cancelled] }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        admit_count: { type: integer }
+        deny_count: { type: integer }
+        escalate_count: { type: integer }
+        risk_score: { type: number }
+        summary: { type: string }
+        consequence_map_id: { type: string }
+    ScenarioRunCreate:
+      type: object
+      required: [tenant_id, scenario_id, run_mode, target_object]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        scenario_id: { $ref: '#/components/schemas/KyeId' }
+        run_mode: { type: string }
+        target_object: { $ref: '#/components/schemas/TargetObject' }
+        resolved_inputs: { type: object }
+        started_at: { type: string, format: date-time }
+    ScenarioRunPatch:
+      type: object
+      properties:
+        status: { type: string }
+        ended_at: { type: string, format: date-time }
+        admit_count: { type: integer }
+        deny_count: { type: integer }
+        escalate_count: { type: integer }
+        risk_score: { type: number }
+        summary: { type: string }
+        consequence_map_id: { type: string }
+        divergence_from_baseline: { type: boolean }
+        signed_by: { type: string }
+        signature: { $ref: '#/components/schemas/Signature' }
+    ScenarioRunEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        scenario_run: { $ref: '#/components/schemas/ScenarioRun' }
+    ScenarioRunList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        scenario_runs: { type: array, items: { $ref: '#/components/schemas/ScenarioRun' } }
+
+    StressTest:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        name: { type: string }
+        severity: { type: string, enum: [low, medium, high, critical] }
+        status: { type: string }
+        last_run_id: { type: string }
+        last_run_at: { type: string, format: date-time }
+    StressTestCreate:
+      type: object
+      required: [tenant_id, name, target_object]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        name: { type: string }
+        description: { type: string }
+        target_object: { $ref: '#/components/schemas/TargetObject' }
+        stressors: { type: array, items: { type: object } }
+        severity: { type: string, enum: [low, medium, high, critical] }
+    StressTestPatch:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        severity: { type: string, enum: [low, medium, high, critical] }
+        status: { type: string }
+        stressors: { type: array, items: { type: object } }
+    StressTestEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        stress_test: { $ref: '#/components/schemas/StressTest' }
+    StressTestList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        stress_tests: { type: array, items: { $ref: '#/components/schemas/StressTest' } }
+    StressTestRerunResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        stress_test_id: { type: string }
+        run_id: { type: string }
+        status: { type: string }
+        requested_at: { type: string, format: date-time }
+        requested_by: { type: string }
+
+    Stressor:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { type: string }
+        stressor_id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        default_severity: { type: string, enum: [low, medium, high, critical] }
+        parameters_json: { type: string }
+    StressorCreate:
+      type: object
+      required: [stressor_id, name]
+      properties:
+        tenant_id: { type: string }
+        stressor_id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        default_severity: { type: string, enum: [low, medium, high, critical] }
+        parameters: { type: object }
+    StressorPatch:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        default_severity: { type: string, enum: [low, medium, high, critical] }
+        parameters: { type: object }
+    StressorEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        stressor: { $ref: '#/components/schemas/Stressor' }
+    StressorList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        stressors: { type: array, items: { $ref: '#/components/schemas/Stressor' } }
+
+    ConsequenceMap:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        version: { type: integer }
+        scenario_run_id: { type: string }
+        target_object_id: { type: string }
+        target_object_schema: { type: string }
+        summary: { type: string }
+        generated_at: { type: string, format: date-time }
+        verified_at: { type: string, format: date-time }
+        content_hash: { type: string, pattern: '^[0-9a-f]{64}$' }
+    ConsequenceMapCreate:
+      type: object
+      required: [tenant_id, target_object]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        scenario_run_id: { type: string }
+        target_object: { $ref: '#/components/schemas/TargetObject' }
+        nodes: { type: array, items: { type: object } }
+        edges: { type: array, items: { type: object } }
+        summary: { type: string }
+    ConsequenceMapPatch:
+      type: object
+      properties:
+        summary: { type: string }
+        nodes: { type: array, items: { type: object } }
+        edges: { type: array, items: { type: object } }
+        content_hash: { type: string, pattern: '^[0-9a-f]{64}$' }
+        signature: { $ref: '#/components/schemas/Signature' }
+    ConsequenceMapEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        consequence_map: { $ref: '#/components/schemas/ConsequenceMap' }
+    ConsequenceMapList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        consequence_maps: { type: array, items: { $ref: '#/components/schemas/ConsequenceMap' } }
+
+    ApprovalBrief:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        version: { type: integer }
+        proposed_action_id: { type: string }
+        proposed_action_summary: { type: string }
+        approver: { type: string }
+        knowledge_snapshot_id: { type: string }
+        consequence_map_id: { type: string }
+        recommended_decision: { type: string }
+        status: { type: string, enum: [issued, viewed, acknowledged, expired, withdrawn] }
+        viewed_at: { type: string, format: date-time }
+        acknowledged_at: { type: string, format: date-time }
+        validity_not_before: { type: string, format: date-time }
+        validity_not_after: { type: string, format: date-time }
+        issued_at: { type: string, format: date-time }
+        issued_by: { type: string }
+    ApprovalBriefCreate:
+      type: object
+      required: [tenant_id, proposed_action, approver, knowledge_snapshot_id, consequence_map_id, validity]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        proposed_action:
+          type: object
+          required: [action_id, action_schema, summary]
+          properties:
+            action_id: { type: string }
+            action_schema: { type: string }
+            summary: { type: string }
+        approver: { type: string }
+        knowledge_snapshot_id: { type: string }
+        consequence_map_id: { type: string }
+        supporting_scenario_runs: { type: array, items: { type: string } }
+        recommended_decision: { type: string, enum: [approved, approved_with_restrictions, rejected, expired, escalated, requires_more_information] }
+        validity:
+          type: object
+          required: [not_before, not_after]
+          properties:
+            not_before: { type: string, format: date-time }
+            not_after: { type: string, format: date-time }
+    ApprovalBriefPatch:
+      type: object
+      properties:
+        recommended_decision: { type: string }
+        status: { type: string }
+        validity_not_after: { type: string, format: date-time }
+        signature: { $ref: '#/components/schemas/Signature' }
+    ApprovalBriefEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        approval_brief: { $ref: '#/components/schemas/ApprovalBrief' }
+    ApprovalBriefList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        approval_briefs: { type: array, items: { $ref: '#/components/schemas/ApprovalBrief' } }
+
+    ApproverKnowledgeSnapshot:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        version: { type: integer }
+        approver: { type: string }
+        captured_at: { type: string, format: date-time }
+        content_hash: { type: string, pattern: '^[0-9a-f]{64}$' }
+        summary: { type: string }
+        verified_at: { type: string, format: date-time }
+    ApproverKnowledgeSnapshotCreate:
+      type: object
+      required: [tenant_id, approver]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        approver: { type: string }
+        captured_at: { type: string, format: date-time }
+        source_refs: { type: array, items: { type: string } }
+        content_hash: { type: string }
+        summary: { type: string }
+    ApproverKnowledgeSnapshotPatch:
+      type: object
+      properties:
+        summary: { type: string }
+        content_hash: { type: string, pattern: '^[0-9a-f]{64}$' }
+        source_refs: { type: array, items: { type: string } }
+        signature: { $ref: '#/components/schemas/Signature' }
+    ApproverKnowledgeSnapshotEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        approver_knowledge_snapshot: { $ref: '#/components/schemas/ApproverKnowledgeSnapshot' }
+    ApproverKnowledgeSnapshotList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        approver_knowledge_snapshots: { type: array, items: { $ref: '#/components/schemas/ApproverKnowledgeSnapshot' } }
+
+    ApprovalDecision:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        version: { type: integer }
+        approval_brief_id: { type: string }
+        approver: { type: string }
+        decision: { type: string, enum: [approved, approved_with_restrictions, rejected, expired, escalated, requires_more_information] }
+        decided_at: { type: string, format: date-time }
+        rationale: { type: string }
+        revoked_at: { type: string, format: date-time }
+        expired_at: { type: string, format: date-time }
+    ApprovalDecisionCreate:
+      type: object
+      required: [tenant_id, approval_brief_id, approver, decision, rationale]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        approval_brief_id: { type: string }
+        approver: { type: string }
+        decision: { type: string, enum: [approved, approved_with_restrictions, rejected, expired, escalated, requires_more_information] }
+        decided_at: { type: string, format: date-time }
+        rationale: { type: string }
+        restrictions: { type: array, items: { type: object } }
+        escalated_to: { type: string }
+        knowledge_snapshot_id: { type: string }
+    ApprovalDecisionPatch:
+      type: object
+      properties:
+        rationale: { type: string }
+        restrictions: { type: array, items: { type: object } }
+        escalated_to: { type: string }
+        signature: { $ref: '#/components/schemas/Signature' }
+    ApprovalDecisionEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        approval_decision: { $ref: '#/components/schemas/ApprovalDecision' }
+    ApprovalDecisionList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        approval_decisions: { type: array, items: { $ref: '#/components/schemas/ApprovalDecision' } }
+
+    ApprovalEvidencePack:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        version: { type: integer }
+        approval_brief_id: { type: string }
+        knowledge_snapshot_id: { type: string }
+        consequence_map_id: { type: string }
+        approval_decision_id: { type: string }
+        status: { type: string, enum: [pending, sealed, exported, verified] }
+        sealed_at: { type: string, format: date-time }
+        content_hash: { type: string, pattern: '^[0-9a-f]{64}$' }
+    ApprovalEvidencePackCreate:
+      type: object
+      required: [tenant_id]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        approval_brief_id: { type: string }
+        knowledge_snapshot_id: { type: string }
+        consequence_map_id: { type: string }
+        approval_decision_id: { type: string }
+        supporting_scenario_runs: { type: array, items: { type: string } }
+    ApprovalEvidencePackPatch:
+      type: object
+      properties:
+        status: { type: string }
+        content_hash: { type: string, pattern: '^[0-9a-f]{64}$' }
+        sealed_at: { type: string, format: date-time }
+        sealed_by: { type: string }
+        signature: { $ref: '#/components/schemas/Signature' }
+    ApprovalEvidencePackEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        approval_evidence_pack: { $ref: '#/components/schemas/ApprovalEvidencePack' }
+    ApprovalEvidencePackList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        approval_evidence_packs: { type: array, items: { $ref: '#/components/schemas/ApprovalEvidencePack' } }

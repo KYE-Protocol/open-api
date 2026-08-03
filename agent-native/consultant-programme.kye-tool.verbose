@@ -1,0 +1,76 @@
+@kye-tool v1
+@spec consultant-programme.openapi.v1
+@source-sha256 1f728ba05a8e95e0da87ef47c5175713eff995061cfecd44ad0239c93b29f68a
+@compiled-at 2026-05-16T15:19:04Z
+@kid kye:key:agent-tool-signing:dev
+@sig DEV-NOT-FOR-PRODUCTION
+@base https://kye-admin.example
+@auth bearer JWT
+@endpoints 37
+
+GET /api/consultant-lead getConsultantLeadAggregate @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/consultant-lead captureConsultantLead @auth=inherit @purpose=Operate.Read | body:Body -> object
+GET /api/v1/app/consultant-tenant-links listTenantLinksForTenant @auth=inherit @purpose=Operate.Read @idempotent | status:string?,limit:integer? -> object
+GET /api/v1/app/consultant-tenant-links/{id} getTenantLinkForTenant @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+GET /api/v1/app/consultants listConsultantsForTenant @auth=inherit @purpose=Operate.Read @idempotent | level:string?,sector:string?,limit:integer? -> object
+GET /api/v1/app/consultants/{id} getConsultantForTenant @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+GET /api/v1/app/white-label-config getWhiteLabelConfigForTenant @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+GET /api/v1/consultant-certifications listCertifications @auth=inherit @purpose=Operate.Read @idempotent | consultant_id:string?,level:string?,programme:string? -> object
+POST /api/v1/consultant-certifications createCertification @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/consultant-certifications/{id} getCertification @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/consultant-certifications/{id} updateCertification @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/consultant-certifications/{id} softDeleteCertification @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+GET /api/v1/consultant-leads listLeads @auth=inherit @purpose=Operate.Read @idempotent | status:string?,sector:string?,assigned_consultant_id:string?,q:string? -> object
+POST /api/v1/consultant-leads createLead @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/consultant-leads/{id} getLead @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/consultant-leads/{id} updateLead @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/consultant-leads/{id} softDeleteLead @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/consultant-leads/{id}/convert convertLead @auth=inherit @purpose=Operate.Read | Idempotency-Key:string?; body:Body -> object
+POST /api/v1/consultant-leads/{id}/qualify qualifyLead @auth=inherit @purpose=Operate.Read | Idempotency-Key:string? -> object
+GET /api/v1/consultant-tenant-links listTenantLinks @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,consultant_id:string?,status:string? -> object
+POST /api/v1/consultant-tenant-links createTenantLink @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/consultant-tenant-links/{id} getTenantLink @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/consultant-tenant-links/{id} updateTenantLink @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/consultant-tenant-links/{id} softDeleteTenantLink @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/consultant-tenant-links/{id}/revoke revokeTenantLink @auth=inherit @purpose=Operate.Read | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/consultants listConsultants @auth=inherit @purpose=Operate.Read @idempotent | status:string?,level:string?,country:string?,q:string? -> object
+POST /api/v1/consultants createConsultant @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/consultants/{id} getConsultant @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/consultants/{id} updateConsultant @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/consultants/{id} softDeleteConsultant @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/consultants/{id}/certify certifyConsultant @auth=inherit @purpose=Operate.Read | Idempotency-Key:string?; body:Body -> object
+POST /api/v1/consultants/{id}/suspend suspendConsultant @auth=inherit @purpose=Operate.Read | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/white-label-configs listWhiteLabelConfigs @auth=inherit @purpose=Operate.Read @idempotent | consultant_id:string?,tenant_id:string?,status:string? -> object
+POST /api/v1/white-label-configs createWhiteLabelConfig @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/white-label-configs/{id} getWhiteLabelConfig @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/white-label-configs/{id} updateWhiteLabelConfig @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/white-label-configs/{id} softDeleteWhiteLabelConfig @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+
+@hint getConsultantLeadAggregate Aggregate lead-counter (no PII; public)
+@hint captureConsultantLead Capture a consultant programme enquiry (public)
+@hint listTenantLinksForTenant List the caller's tenant links (cloud)
+@hint listConsultantsForTenant List consultants attested into the caller's tenant (cloud)
+@hint getConsultantForTenant Fetch a consultant scoped to the caller's tenant (cloud)
+@hint getWhiteLabelConfigForTenant Fetch the active white-label brand config for the caller's tenant (cloud)
+@hint listCertifications List certifications (admin)
+@hint createCertification Create a certification (admin)
+@hint updateCertification Revoke or update certification validity (admin)
+@hint listLeads List consultant leads (admin)
+@hint createLead Create a consultant lead (admin / import)
+@hint convertLead Mark a lead converted (admin)
+@hint qualifyLead Mark a lead qualified (admin)
+@hint listTenantLinks List consultant↔tenant links (admin)
+@hint createTenantLink Invite a consultant to a tenant (admin)
+@hint updateTenantLink Accept invite or change scope (admin)
+@hint revokeTenantLink Revoke a consultant↔tenant link (admin)
+@hint listConsultants List consultants (admin)
+@hint createConsultant Create a consultant (admin)
+@hint getConsultant Fetch a consultant (admin)
+@hint updateConsultant Update a consultant (admin)
+@hint softDeleteConsultant Soft-delete a consultant (admin)
+@hint certifyConsultant Certify a consultant (admin)
+@hint suspendConsultant Suspend a consultant (admin)
+@hint listWhiteLabelConfigs List white-label brand configs (admin)
+@hint createWhiteLabelConfig Create a white-label brand config (admin)
+
+@end

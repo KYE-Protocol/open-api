@@ -1,0 +1,185 @@
+openapi: "3.1.0"
+info:
+  title: KYE Protocol™ Admin Root Endpoints
+  version: "1.0.0"
+  description: |
+    Root-level (non-/api/v1) endpoints on admin.kyeprotocol.com.
+    These are NOT Clerk-session endpoints: /email-action is
+    authenticated by a signed single-use email-action token in the
+    request itself (constitution §27 §4 Dual-Channel Admin + §27 §7
+    Email-Action Token), and /webhooks/stripe is authenticated by
+    Stripe's v1 webhook signature (constitution §27 §8 — Stripe baked
+    in). The /api/v1 owner console is documented separately in
+    admin.yaml.
+
+servers:
+  - url: https://admin.kyeprotocol.com
+    description: Production admin surface (root paths)
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [ok, error]
+      properties:
+        ok:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+
+paths:
+  # ── Canonical email-action entry point (§27 §4 + §27 §7) ──────────────────
+  /email-action:
+    get:
+      operationId: admin-get-email-action
+      summary: Execute a one-click signed email-action token
+      description: |
+        The single canonical entry point for ALL signed email-action
+        token clicks — commercial-lifecycle, expert-review, consultant
+        approval, key rotation, deploy gate. The flow: (1) verify the
+        token's signature via the canonical email-action-token
+        library; (2) enforce single-use via the
+        `email_action_token_used` D1 table (UNIQUE on token_hash — a
+        re-click renders an "already taken" page without re-dispatching);
+        (3) resolve the admin domain from the workflow_id prefix
+        (`kye:commercial-workflow:*`, `kye:expert-review:*`,
+        `kye:consultant:*`, `kye:key-rotation:*`, `kye:deploy-gate:*`,
+        and the other registered prefixes); (4) dispatch — expert-review
+        actions are applied inline as a D1 UPDATE, every other domain is
+        enqueued onto its queue binding for the lifecycle agent; (5)
+        record the use and render a confirmation page. Because these
+        URLs are clicked by humans, every outcome (missing / expired /
+        re-used token, unknown domain, dispatch failure, success) is an
+        HTML page, not a JSON error: 200 for success and already-used,
+        400 for every failure. Authenticated by the token itself — no
+        bearer auth.
+      tags: [EmailAction]
+      x-kye-source-file: public/admin/functions/email-action.js
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+          description: Signed single-use email-action token (opaque signed payload)
+      responses:
+        "200":
+          description: Action recorded (or token already used — original action remains in effect); HTML confirmation page
+          content:
+            text/html:
+              schema: { type: string }
+        "400":
+          description: Token missing, invalid, expired, or workflow domain unknown; HTML error page
+          content:
+            text/html:
+              schema: { type: string }
+    post:
+      operationId: admin-post-email-action
+      summary: Execute an email-action token submitted via form POST
+      description: |
+        Identical semantics to GET /email-action — the handler delegates
+        POST to the GET logic. POST exists for forms that submit the
+        token in the body rather than the URL, which avoids email-client
+        link rewriting / tracking parameters corrupting the signed GET
+        URL. The token is still read from the `token` query parameter of
+        the submitted form action. Same single-use enforcement, domain
+        dispatch and HTML confirmation/error rendering as GET.
+        Authenticated by the token itself — no bearer auth.
+      tags: [EmailAction]
+      x-kye-source-file: public/admin/functions/email-action.js
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+          description: Signed single-use email-action token (opaque signed payload)
+      responses:
+        "200":
+          description: Action recorded (or token already used); HTML confirmation page
+          content:
+            text/html:
+              schema: { type: string }
+        "400":
+          description: Token missing, invalid, expired, or workflow domain unknown; HTML error page
+          content:
+            text/html:
+              schema: { type: string }
+
+  # ── Stripe webhook receiver (§27 §8) ──────────────────────────────────────
+  /webhooks/stripe:
+    post:
+      operationId: admin-post-webhooks-stripe
+      summary: Receive and dispatch Stripe webhook events
+      description: |
+        Verifies the `Stripe-Signature` header (Stripe's documented v1
+        Stripe's published webhook-signature scheme (300-second timestamp tolerance),
+        constant-time comparison) against STRIPE_WEBHOOK_SIGNING_SECRET,
+        then translates the event into a commercial-lifecycle transition
+        request enqueued onto KYE_LIFECYCLE_QUEUE — the lifecycle agent
+        is the only code path that mutates `commercial_workflows` state.
+        Handled events: invoice.paid / invoice.payment_succeeded (the
+        ONLY signal that advances a workflow toward access provisioning,
+        §27 §6 payment-gate hard-lock), invoice.payment_failed (with
+        failure_code mapped to the canonical taxonomy),
+        invoice.payment_action_required (3DS/SCA), invoice.voided,
+        invoice.marked_uncollectible, charge.refunded,
+        charge.dispute.created, customer.subscription.deleted, plus the
+        read-model-only checkout.session.completed and
+        customer.subscription.updated projections. Unhandled event
+        types are acknowledged with `{ignored: true}` so Stripe does not
+        retry. Authenticated by the Stripe signature — no bearer auth.
+      tags: [Webhooks]
+      x-kye-source-file: public/admin/functions/webhooks/stripe.js
+      security: []
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          required: true
+          schema: { type: string }
+          description: Stripe v1 signature header (t=<unix_ts>,v1=<hex_sig>,…)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Stripe event envelope (https://docs.stripe.com/api/events)
+              required: [id, type]
+              properties:
+                id: { type: string }
+                type: { type: string }
+                livemode: { type: boolean }
+                data:
+                  type: object
+                  properties:
+                    object: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: Event acknowledged — dispatched to the lifecycle queue, or ignored (unhandled type)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  ignored: { type: boolean }
+                  event_type: { type: string }
+                  event_id: { type: string }
+                  dispatched: { type: string, description: "Lifecycle request kind, e.g. stripe.invoice.paid" }
+        "400":
+          description: Body is not valid JSON or the event envelope is malformed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Stripe-Signature header missing, stale, or signature mismatch
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: Signing secret unset or queue dispatch failed — Stripe should retry
+          content:
+            text/plain:
+              schema: { type: string }

@@ -1,0 +1,29 @@
+@kye-tool v1
+@spec state.openapi.v1
+@source-sha256 824b485b111c97b49b2a08e567d9757d572cdb1a6791852424db6ec9b36325f5
+@compiled-at 2026-05-16T15:19:04Z
+@kid kye:key:agent-tool-signing:dev
+@sig DEV-NOT-FOR-PRODUCTION
+@base https://kye.example
+@auth bearer token
+@endpoints 8
+
+GET /api/v1/state-events state.listStateEvents @auth=inherit @purpose=Operate.Read @idempotent | entity_id:string?,machine_id:string?,from:string?,to:string? -> object
+POST /api/v1/state-events fireStateEvent @auth=inherit @purpose=Operate.Read | body:Body -> object
+GET /api/v1/state-machines state.listStateMachines @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,entity_class:string?,scope:string? -> object
+POST /api/v1/state-machines state.createStateMachine @auth=inherit @purpose=Operate.Read | body:Body -> object
+POST /api/v1/state-machines/from-library adoptStateLibraryEntry @auth=inherit @purpose=Operate.Read | body:Body -> object
+GET /api/v1/state-machines/{machine_id} getStateMachine @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+GET /api/v1/state-registry/{tenant_id} getStateRegistry @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+GET /api/v1/state-transitions listStateTransitions @auth=inherit @purpose=Operate.Read @idempotent | machine_id:string -> object
+
+@hint state.listStateEvents List state events (append-only log)
+@hint fireStateEvent Fire a state transition event for an entity
+@hint state.listStateMachines List state machines visible to the authenticated tenant
+@hint state.createStateMachine Create a tenant-scoped state machine (or extension)
+@hint adoptStateLibraryEntry Derive a tenant state machine from a State Library entry
+@hint getStateMachine Get a state machine by ID
+@hint getStateRegistry Get the State Registry summary for a tenant
+@hint listStateTransitions List declared state transitions for a machine
+
+@end

@@ -1,0 +1,883 @@
+openapi: "3.1.0"
+info:
+  title: KYE Protocol™ Cloud Partner-Plane API
+  version: "1.0.0"
+  description: |
+    Consultant / partner / trainer / auditor plane of the KYE Cloud™
+    dashboard — app.kyeprotocol.com/partner/ (Cloudflare Pages
+    Functions backed by the kye-prod D1 database; consolidated from
+    the retired dash.kyeprotocol.com surface, §07 §1a 2026-07-16).
+
+    Deny-by-default auth: /_middleware.js verifies the Clerk RS256
+    JWT against the Clerk JWKS, resolves the signed-in user to a row
+    in the consultants table by email (migration 008), and attaches
+    the consultant context to every /api/v1/partner/* request. Any
+    verification failure returns 401. A signed-in user whose email is
+    not on the consultants roster receives 403 not_enrolled (with an
+    apply_url); a suspended consultant receives 403
+    consultant_suspended. Responses are scoped to the calling
+    consultant / partner / trainer-org id.
+
+servers:
+  - url: https://app.kyeprotocol.com
+    description: Production app surface (partner plane)
+
+security:
+  - ClerkBearer: []
+
+components:
+  securitySchemes:
+    ClerkBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Clerk RS256 JWT. The middleware maps the token email to the
+        consultants roster; non-enrolled users are denied 403.
+
+  responses:
+    Unauthorized:
+      description: Missing bearer token, or JWT verification failed (signature / issuer / expiry)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Signed in but not on the consultants roster (not_enrolled) or suspended (consultant_suspended)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    DbUnavailable:
+      description: D1 binding KYE_DB is not configured on the Pages project
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: { type: boolean, enum: [false] }
+        error: { type: string }
+        reason: { type: string }
+
+    Lead:
+      type: object
+      properties:
+        id: { type: string }
+        submitted_at: { type: string, format: date-time }
+        submitter_email: { type: string }
+        submitter_name: { type: string }
+        organisation: { type: string }
+        sector: { type: string }
+        country: { type: string }
+        status: { type: string, enum: [captured, qualified, converted, rejected] }
+        qualified_at: { type: [string, "null"], format: date-time }
+
+    DealRegistration:
+      type: object
+      properties:
+        deal_id: { type: string, description: "kye:deal:<partner>-<timestamp>" }
+        customer: { type: string }
+        stage: { type: string, enum: [qualifying, scoping, contracting, closed_won, closed_lost] }
+        expected_close: { type: [string, "null"] }
+        expected_acv: { type: number }
+        share_pct: { type: integer, description: Revenue-share percentage (default 30) }
+        registered_at: { type: string, format: date-time }
+        signed_by_kid: { type: [string, "null"] }
+
+    MarketplaceListing:
+      type: object
+      properties:
+        listing_id: { type: string }
+        listing_kind: { type: string, enum: [rule_pack, sector_pack, widget] }
+        name: { type: string }
+        sectors: { type: array, items: { type: string } }
+        price: { type: number }
+        share_pct: { type: integer }
+        status: { type: string }
+        published_at: { type: [string, "null"], format: date-time }
+
+    ReplayRun:
+      type: object
+      properties:
+        run_id: { type: string }
+        decision_id: { type: [string, "null"] }
+        verdict: { type: string }
+        signer_kid: { type: [string, "null"] }
+        reason: { type: [string, "null"] }
+        ran_at: { type: string, format: date-time }
+
+paths:
+  # ── Consultant identity + profile ───────────────────────────────────────────
+  /api/v1/partner/me:
+    get:
+      operationId: app-get-api-v1-partner-me
+      summary: Signed-in consultant profile + KPIs
+      description: >-
+        Returns the consultant's own roster row plus aggregate KPI
+        counts computed as live scalar D1 queries — open leads
+        (captured / qualified), active tenant links, unexpired
+        certifications, and signed attributions.
+      tags: [Consultant]
+      responses:
+        "200":
+          description: Profile + KPI counters
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, consultant, kpis]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  consultant:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      display_name: { type: string }
+                      email: { type: string }
+                      status: { type: string }
+                      certification_level: { type: [string, "null"] }
+                  kpis:
+                    type: object
+                    properties:
+                      open_leads: { type: integer }
+                      linked_tenants: { type: integer }
+                      active_certifications: { type: integer }
+                      signed_attributions: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/v1/partner/settings:
+    get:
+      operationId: app-get-api-v1-partner-settings
+      summary: Read the consultant's editable profile fields
+      description: >-
+        Returns the full consultants row for the signed-in consultant
+        (identity, contact, sectors / languages JSON, bio, links,
+        status, certification level, timestamps).
+      tags: [Consultant]
+      responses:
+        "200":
+          description: Current settings row
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, settings]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  settings: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Consultant row no longer present (consultant_not_found)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    patch:
+      operationId: app-patch-api-v1-partner-settings
+      summary: Update the consultant's editable profile fields
+      description: >-
+        Parameterised D1 update of the consultants row. Only the
+        whitelisted fields are writable from this surface; any other
+        key in the body is ignored. String values are capped at 2000
+        characters; null clears a field. At least one editable field
+        must be provided.
+      tags: [Consultant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Any subset of the editable fields; each is a string (max 2000 chars) or null to clear
+              properties:
+                display_name: { type: [string, "null"] }
+                phone: { type: [string, "null"] }
+                country: { type: [string, "null"] }
+                sectors_json: { type: [string, "null"], description: JSON-encoded array of sector slugs }
+                languages_json: { type: [string, "null"], description: JSON-encoded array of language codes }
+                bio: { type: [string, "null"] }
+                website: { type: [string, "null"] }
+                linkedin: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Update applied
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, updated_fields]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  updated_fields:
+                    type: array
+                    items: { type: string }
+        "400":
+          description: invalid_json, field_too_long, or no_editable_fields_provided
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/v1/partner/consultant-card:
+    get:
+      operationId: app-get-api-v1-partner-consultant-card
+      summary: Read the consultant's signed Consultant Card™ envelope
+      description: >-
+        Returns the latest signed kye.consultant_card.v1 envelope row
+        for the signed-in consultant. Envelope signing happens
+        server-side in the consultant-engine runtime; if no card row
+        is provisioned yet the endpoint returns a minimal card view
+        derived from the roster row with provisioned: false and a
+        null envelope.
+      tags: [Consultant]
+      responses:
+        "200":
+          description: Card view + signed envelope (envelope is null until provisioned)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, card, provisioned]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  card:
+                    type: object
+                    properties:
+                      display_name: { type: [string, "null"] }
+                      firm: { type: [string, "null"] }
+                      certification_level: { type: [string, "null"] }
+                      sectors: { type: array, items: { type: string } }
+                      bio: { type: [string, "null"] }
+                      website: { type: [string, "null"] }
+                      linkedin: { type: [string, "null"] }
+                      signed_by_kid: { type: [string, "null"] }
+                      sealed_at: { type: [string, "null"], format: date-time }
+                  envelope:
+                    type: [object, "null"]
+                    description: Signed kye.consultant_card.v1 envelope, when sealed
+                  provisioned: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  # ── Pipeline: leads + deal registrations ────────────────────────────────────
+  /api/v1/partner/leads:
+    get:
+      operationId: app-get-api-v1-partner-leads
+      summary: Leads assigned to the signed-in consultant
+      description: >-
+        Lists consultant_leads rows assigned to the caller, newest
+        first. The status filter maps onto the underlying lead states
+        (open = captured + qualified).
+      tags: [Pipeline]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, qualified, converted, rejected, all]
+            default: open
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Assigned leads
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, consultant_id, status_filter, count, leads]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  consultant_id: { type: string }
+                  status_filter: { type: string }
+                  count: { type: integer }
+                  leads:
+                    type: array
+                    items: { $ref: "#/components/schemas/Lead" }
+        "400":
+          description: bad_status_filter — status not in open | qualified | converted | rejected | all
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/v1/partner/partner-leads:
+    get:
+      operationId: app-get-api-v1-partner-partner-leads
+      summary: Partner lead pipeline (partners.html panel)
+      description: >-
+        The partner-panel projection of the caller's assigned
+        consultant_leads rows (migration 008), mapped to the pipeline
+        table shape (customer / stage / region / vertical / opened /
+        ACV). expected_acv_usd is taken from the partner's own
+        registered deal for the same customer when one exists and is
+        null otherwise — no value is ever invented.
+      tags: [Pipeline]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Partner lead pipeline, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, partner_id, count, leads]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  partner_id: { type: string }
+                  count: { type: integer }
+                  leads:
+                    type: array
+                    items:
+                      type: object
+                      required: [lead_id, customer, stage, opened_at]
+                      properties:
+                        lead_id: { type: string }
+                        customer: { type: string }
+                        stage: { type: string, enum: [captured, qualified, converted] }
+                        region: { type: [string, "null"] }
+                        vertical: { type: [string, "null"] }
+                        opened_at: { type: string, format: date-time }
+                        expected_acv_usd:
+                          type: [number, "null"]
+                          description: From the partner's own registered deal for the same customer; null when none exists.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  /api/v1/partner/partner-payouts:
+    get:
+      operationId: app-get-api-v1-partner-partner-payouts
+      summary: Partner payout history (partners.html panel)
+      description: >-
+        Quarterly revenue-share ACCRUALS derived from the caller's
+        closed_won deal_registrations rows (share % fixed at
+        registration time, constitution §10 §6). Status is always
+        "accrued" — no disbursement ledger exists yet, so nothing is
+        ever reported as paid. A partner with no closed-won deals
+        receives an honest empty list.
+      tags: [Pipeline]
+      responses:
+        "200":
+          description: Per-quarter accruals, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, partner_id, payouts, basis]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  partner_id: { type: string }
+                  basis: { type: string }
+                  payouts:
+                    type: array
+                    items:
+                      type: object
+                      required: [period, deal_count, gross_arr_usd, share_pct, payout_usd, status]
+                      properties:
+                        period: { type: string, description: Canonical quarter label, e.g. 2026-Q2 }
+                        deal_count: { type: integer }
+                        gross_arr_usd: { type: number }
+                        share_pct: { type: number }
+                        payout_usd: { type: number }
+                        status: { type: string, enum: [accrued] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  /api/v1/partner/deal-registrations:
+    get:
+      operationId: app-get-api-v1-partner-deal-registrations
+      summary: List deals registered by the calling partner
+      description: >-
+        Returns up to 200 kye.deal_registration.v1 rows owned by the
+        calling partner, newest first.
+      tags: [Pipeline]
+      responses:
+        "200":
+          description: Registered deals
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, partner_id, deals]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  partner_id: { type: string }
+                  deals:
+                    type: array
+                    items: { $ref: "#/components/schemas/DealRegistration" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+    post:
+      operationId: app-post-api-v1-partner-deal-registrations
+      summary: Register a new deal
+      description: >-
+        Persists a kye.deal_registration.v1 row tracked against the
+        partner's signing kid with a default 30% revenue share.
+        customer is required; stage must be one of the canonical
+        pipeline stages.
+      tags: [Pipeline]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customer, stage]
+              properties:
+                customer: { type: string }
+                stage:
+                  type: string
+                  enum: [qualifying, scoping, contracting, closed_won, closed_lost]
+                expected_close: { type: string, description: Expected close date (free-form ISO date string) }
+                expected_acv: { type: number, description: Expected annual contract value }
+                notes: { type: string }
+      responses:
+        "200":
+          description: Deal registered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, deal_id, registered_at, signed_by_kid]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  deal_id: { type: string }
+                  registered_at: { type: string, format: date-time }
+                  signed_by_kid: { type: string }
+        "400":
+          description: customer_required or invalid_stage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  reason: { type: string }
+                  supported: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  # ── Marketplace ─────────────────────────────────────────────────────────────
+  /api/v1/partner/marketplace-listings:
+    get:
+      operationId: app-get-api-v1-partner-marketplace-listings
+      summary: Marketplace listings owned by the caller
+      description: >-
+        Lists the kye.{rule_pack,sector_pack,widget}_listing.v1 rows
+        the calling partner / consultant owns — pricing, sectors,
+        revenue-share split, publication status. Optionally filtered
+        by listing kind.
+      tags: [Marketplace]
+      parameters:
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum: [rule_pack, sector_pack, widget]
+      responses:
+        "200":
+          description: Owned listings (up to 200)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, owner_id, listings]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  owner_id: { type: string }
+                  kind: { type: [string, "null"] }
+                  listings:
+                    type: array
+                    items: { $ref: "#/components/schemas/MarketplaceListing" }
+        "400":
+          description: invalid_kind — kind not in rule_pack | sector_pack | widget
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  reason: { type: string }
+                  supported: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  # ── Evidence: attributions + certifications + reports ──────────────────────
+  /api/v1/partner/attributions:
+    get:
+      operationId: app-get-api-v1-partner-attributions
+      summary: Signed attributions on evidence packs
+      description: >-
+        Lists consultant_attributions rows for the signed-in
+        consultant — each a signed attribution placed on a customer
+        evidence pack (tenant_id, evidence_pack_id, attested_by /
+        attested_at, signature alg + kid), newest first.
+      tags: [Evidence]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Signed attributions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, consultant_id, count, attributions]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  consultant_id: { type: string }
+                  count: { type: integer }
+                  attributions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        tenant_id: { type: string }
+                        evidence_pack_id: { type: string }
+                        attested_by: { type: string }
+                        attested_at: { type: string, format: date-time }
+                        signature_alg: { type: string }
+                        signature_kid: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/v1/partner/certifications:
+    get:
+      operationId: app-get-api-v1-partner-certifications
+      summary: Certifications held by the signed-in consultant
+      description: >-
+        Lists consultant_certifications rows with a derived `active`
+        flag computed from the not_before / not_after validity window
+        at request time, plus total / active counts.
+      tags: [Evidence]
+      responses:
+        "200":
+          description: Certification history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, consultant_id, counts, certifications]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  consultant_id: { type: string }
+                  counts:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      active: { type: integer }
+                  certifications:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        level: { type: string }
+                        program: { type: string }
+                        issued_at: { type: string, format: date-time }
+                        issued_by: { type: string }
+                        not_before: { type: string, format: date-time }
+                        not_after: { type: string, format: date-time }
+                        active: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/v1/partner/tenants:
+    get:
+      operationId: app-get-api-v1-partner-tenants
+      summary: Tenants the signed-in consultant operates on
+      description: >-
+        Rows from consultant_tenant_links (migration 008) for the
+        calling consultant — invited / accepted / revoked link states
+        plus aggregate counts. Scoped to the caller's consultant id by
+        the partner-plane middleware; no cross-consultant reads.
+      tags: [Consultant]
+      responses:
+        "200":
+          description: Link rows + counts for the calling consultant
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, consultant_id, counts, tenants]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  consultant_id: { type: string }
+                  counts:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      active: { type: integer }
+                      revoked: { type: integer }
+                  tenants:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        tenant_id: { type: string }
+                        scope: { type: string }
+                        invited_at: { type: string }
+                        invited_by: { type: string }
+                        accepted_at: { type: [string, "null"] }
+                        revoked_at: { type: [string, "null"] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/v1/partner/reports:
+    get:
+      operationId: app-get-api-v1-partner-reports
+      summary: Signed reports the partner-plane user has access to
+      description: >-
+        KYE Reporting Engine™ partner-plane view. Returns signed kye.report.v1
+        envelope rows on tenants the consultant is attributed to
+        (access derives from consultant_attributions — a consultant
+        who attested an evidence pack can read reports on that
+        tenant). Optionally filtered by regulatory framework. Report
+        synthesis itself is patent-track and not disclosed here.
+      tags: [Evidence]
+      parameters:
+        - name: framework
+          in: query
+          schema: { type: string }
+          description: Exact-match filter on the report's regulatory framework
+      responses:
+        "200":
+          description: Accessible report envelopes (up to 200, newest sealed first)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, consultant_id, rows]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  consultant_id: { type: string }
+                  framework: { type: [string, "null"] }
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        report_id: { type: string }
+                        tenant_id: { type: string }
+                        report_kind: { type: string }
+                        framework: { type: string }
+                        period_start: { type: string }
+                        period_end: { type: string }
+                        headline_verdict: { type: string }
+                        sealed_at: { type: [string, "null"], format: date-time }
+                        signed_by_kid: { type: [string, "null"] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  # ── Replay-Proof™ console ───────────────────────────────────────────────────
+  /api/v1/partner/replay-runs:
+    get:
+      operationId: app-get-api-v1-partner-replay-runs
+      summary: Recent Replay-Proof™ verifications by this user
+      description: >-
+        Lists the last 100 replay-verify calls the caller has made via
+        the partner console (decision id, verdict, signer kid, reason,
+        timestamp).
+      tags: [Replay]
+      responses:
+        "200":
+          description: Verification history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, runs]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  runs:
+                    type: array
+                    items: { $ref: "#/components/schemas/ReplayRun" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  /api/v1/partner/replay-verify:
+    post:
+      operationId: app-post-api-v1-partner-replay-verify
+      summary: Verify a KYE-anchored artefact
+      description: >-
+        Two clearly-separated verdict layers. (1) DISCLOSED — real
+        Ed25519 signature verification of a { payload, signature:
+        { alg: EdDSA, kid, sig } } envelope against the published
+        self-audit JWKS (kyeprotocol.com/trust/self-audit-jwks.json);
+        the §0.4 "Replay-Proof™ derivable from public keys alone"
+        contract. (2) DEFERRED — offline replay reconstruction is
+        patent-track; when the KYE_REPLAY_ENGINE service binding is
+        present the call is proxied, otherwise that layer alone
+        reports replay: deferred. Every call is recorded as a
+        replay_runs row for the caller.
+      tags: [Replay]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Provide either `input` or `live`
+              properties:
+                input:
+                  type: string
+                  description: >-
+                    A signed envelope as a JSON string (verified
+                    against the JWKS), or a kye:decision:... id
+                    (routed to the replay layer).
+                live:
+                  type: string
+                  description: >-
+                    "latest" or a YYYY-MM-DD date — fetches and
+                    verifies the published LIVE self-audit bundle for
+                    that day.
+      responses:
+        "200":
+          description: Verification result (both layers reported separately)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, run_id, verdict, signature, replay, ran_at]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  run_id: { type: string }
+                  verdict:
+                    type: string
+                    description: signature_verified | signature_failed, or the replay layer's verdict when no signed envelope was supplied
+                  decision_id: { type: [string, "null"] }
+                  signer_kid: { type: [string, "null"] }
+                  signature:
+                    type: object
+                    properties:
+                      verified: { type: [boolean, "null"] }
+                      kid: { type: [string, "null"] }
+                      alg: { type: [string, "null"] }
+                      key_class: { type: [string, "null"] }
+                      reason: { type: [string, "null"] }
+                  replay:
+                    type: object
+                    properties:
+                      verdict: { type: string }
+                      reason: { type: string }
+                  ran_at: { type: string, format: date-time }
+        "400":
+          description: empty_input, invalid_envelope_json, unrecognised_input, or live not "latest" / YYYY-MM-DD
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  verdict: { type: string, enum: [rejected] }
+                  reason: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502":
+          description: The published LIVE self-audit bundle could not be fetched or was not JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  verdict: { type: string, enum: [rejected] }
+                  reason: { type: string }
+                  source: { type: string }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  # ── Trainer-org views ───────────────────────────────────────────────────────
+  /api/v1/partner/training-cohorts:
+    get:
+      operationId: app-get-api-v1-partner-training-cohorts
+      summary: Cohorts owned by the calling trainer-org
+      description: >-
+        Lists up to 200 training cohorts owned by the caller with
+        enrolled / passed counters. Signed completion records are
+        surfaced separately via /api/v1/training-completions.
+      tags: [Training]
+      responses:
+        "200":
+          description: Trainer-owned cohorts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, trainer_org_id, cohorts]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  trainer_org_id: { type: string }
+                  cohorts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        cohort_id: { type: string }
+                        name: { type: string }
+                        starts_at: { type: [string, "null"] }
+                        ends_at: { type: [string, "null"] }
+                        enrolled: { type: integer }
+                        passed: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  /api/v1/partner/training-completions:
+    get:
+      operationId: app-get-api-v1-partner-training-completions
+      summary: Signed training completion records
+      description: >-
+        Lists up to 200 kye.training.completion.v1 envelope rows the
+        trainer-org has sealed — partner_user_id, cohort_id, verdict
+        (pass / fail / pending), score, sealed_at + signed_by_kid.
+      tags: [Training]
+      responses:
+        "200":
+          description: Sealed completion records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, trainer_org_id, completions]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  trainer_org_id: { type: string }
+                  completions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        completion_id: { type: string }
+                        cohort_id: { type: string }
+                        partner_user_id: { type: string }
+                        verdict: { type: string, enum: [pass, fail, pending] }
+                        score: { type: [integer, "null"] }
+                        sealed_at: { type: [string, "null"], format: date-time }
+                        signed_by_kid: { type: [string, "null"] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }

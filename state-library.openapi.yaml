@@ -1,0 +1,198 @@
+openapi: 3.1.0
+info:
+  title: KYE Protocol™ State Library API
+  version: 3.0.0
+  description: |
+    Browse and adopt entries from the KYE State Library — a curated catalogue of
+    30+ regulatory-aligned state machine templates covering banking, payments,
+    insurance, healthcare, pharma, logistics, energy, regtech, and AI governance.
+
+servers:
+  - url: https://kye.example
+    description: Reference KYE deployment
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: state-library
+
+paths:
+  /api/v1/state-library:
+    get:
+      tags: [state-library]
+      operationId: listStateLibrary
+      summary: List published State Library entries
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [banking, payments, insurance, healthcare, pharma, logistics, energy, regtech, ai_governance]
+        - name: entity_class
+          in: query
+          schema: { type: string }
+        - name: regulatory_alignment
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Catalogue of library entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StateLibraryEntry' }
+
+  /api/v1/state-library/{library_id}:
+    parameters:
+      - name: library_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: 'Format: kye:state-library:<sector>.<name>.v<n>'
+    get:
+      tags: [state-library]
+      operationId: getStateLibraryEntry
+      summary: Get full detail for a State Library entry
+      responses:
+        '200':
+          description: Library entry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StateLibraryEntry' }
+        '404': { description: Not found }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    LibraryAuthor:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        org: { type: string }
+        role: { type: string }
+
+    LibraryStateObligation:
+      type: object
+      required: [id, summary]
+      properties:
+        id: { type: string }
+        summary: { type: string }
+        evidence_class: { type: string }
+        frequency: { type: string }
+        sla_hours: { type: integer, minimum: 0 }
+
+    LibraryState:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [initial, transient, stable, terminal] }
+        description: { type: string }
+        obligations:
+          type: array
+          items: { $ref: '#/components/schemas/LibraryStateObligation' }
+        sla_max_dwell_hours: { type: integer, minimum: 0 }
+
+    LibraryTransition:
+      type: object
+      required: [from, to, guards, actor_role_required]
+      properties:
+        from: { type: string }
+        to: { type: string }
+        guards: { type: array, items: { type: string } }
+        actor_role_required: { type: string }
+        effects: { type: array, items: { type: string } }
+        max_dwell_time_hours: { type: integer, minimum: 0 }
+        evidence_class: { type: string }
+
+    LibraryLockedObligation:
+      type: object
+      required: [id, summary]
+      properties:
+        id: { type: string }
+        summary: { type: string }
+        regulatory_basis: { type: string }
+
+    LibrarySignature:
+      type: object
+      required: [alg, kid, value_b64]
+      properties:
+        alg: { type: string, enum: [EdDSA, ES256, ES384] }
+        kid: { type: string }
+        value_b64: { type: string }
+
+    StateLibraryEntry:
+      type: object
+      required:
+        - library_id
+        - category
+        - title
+        - version
+        - description
+        - authors
+        - regulatory_alignment
+        - applies_to_entity_class
+        - license
+        - states
+        - transitions
+        - platform_locked_obligations
+        - machine_seal
+        - signature
+        - published_at
+      properties:
+        schema_version: { type: string, enum: [kye.state.library_entry.v1] }
+        library_id:
+          type: string
+          description: 'Format: kye:state-library:<sector>.<name>.v<n>'
+        category:
+          type: string
+          enum: [banking, payments, insurance, healthcare, pharma, logistics, energy, regtech, ai_governance]
+        title: { type: string }
+        version: { type: string, description: 'Semver e.g. 1.0.0' }
+        description: { type: string }
+        authors:
+          type: array
+          items: { $ref: '#/components/schemas/LibraryAuthor' }
+        regulatory_alignment:
+          type: array
+          items: { type: string }
+          description: 'Regulatory framework references e.g. FCA-CONC-5, EU-AI-Act-Art-17'
+        applies_to_entity_class: { type: string }
+        license: { type: string, enum: [MIT, Apache-2.0, CC-BY-4.0] }
+        states:
+          type: array
+          items: { $ref: '#/components/schemas/LibraryState' }
+        transitions:
+          type: array
+          items: { $ref: '#/components/schemas/LibraryTransition' }
+        platform_locked_obligations:
+          type: array
+          items: { $ref: '#/components/schemas/LibraryLockedObligation' }
+          description: Obligations that cannot be overridden by adopting tenants
+        compatibility:
+          type: array
+          items: { type: string }
+          description: Other library entries this machine composes with
+        machine_seal:
+          type: string
+          description: 'sha256 hex of canonical JSON (all fields except signature)'
+        signature: { $ref: '#/components/schemas/LibrarySignature' }
+        published_at: { type: string, format: date-time }
+        deprecated_at: { type: string, format: date-time }
+        supersedes:
+          type: string
+          description: Library ID of the superseded entry

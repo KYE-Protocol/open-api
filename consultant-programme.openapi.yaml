@@ -1,0 +1,691 @@
+openapi: 3.1.0
+info:
+  title: KYE Protocol™ — Consultant Program™ API
+  version: 1.0.0
+  description: |
+    Admin authoring (owner-gated), tenant-scoped read endpoints, and the
+    public lead-capture endpoint for the KYE Consultant Program™.
+
+    All POST endpoints accept an `Idempotency-Key` header; if present, the
+    response is cached per (tenant_id, scope, key) and returned verbatim
+    on retry. Soft-delete only — `deleted_at` is set; rows are never
+    physically removed.
+
+    Patent-safety: this spec MUST stay free of mechanism vocabulary.
+
+    Base path: /api/v1/ (admin + cloud) and /api/ (public site).
+
+servers:
+  - url: https://kye-admin.example
+    description: KYE Admin Console (owner-gated; cross-tenant authoring)
+  - url: https://kye-app.example
+    description: KYE Cloud (tenant-scoped read-only)
+  - url: https://kyeprotocol.com
+    description: KYE marketing site (public lead capture only)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: consultant-programme
+    description: KYE Consultant Program™ — consultants, certifications, tenant links, white-label configs, leads, attributions.
+
+paths:
+  # =========================================================================
+  # Admin — Consultants
+  # =========================================================================
+  /api/v1/consultants:
+    get:
+      tags: [consultant-programme]
+      operationId: listConsultants
+      summary: List consultants (admin)
+      parameters:
+        - { name: status,  in: query, schema: { type: string } }
+        - { name: level,   in: query, schema: { type: string } }
+        - { name: country, in: query, schema: { type: string } }
+        - { name: q,       in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultantList' } } } }
+    post:
+      tags: [consultant-programme]
+      operationId: createConsultant
+      summary: Create a consultant (admin)
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultantCreate' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultantEnvelope' } } } }
+        '400': { description: Validation error }
+        '409': { description: Duplicate email }
+  /api/v1/consultants/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [consultant-programme]
+      operationId: getConsultant
+      summary: Fetch a consultant (admin)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultantEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [consultant-programme]
+      operationId: updateConsultant
+      summary: Update a consultant (admin)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultantPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultantEnvelope' } } } } }
+    delete:
+      tags: [consultant-programme]
+      operationId: softDeleteConsultant
+      summary: Soft-delete a consultant (admin)
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/consultants/{id}/certify:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [consultant-programme]
+      operationId: certifyConsultant
+      summary: Certify a consultant (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CertifyRequest' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/CertificationEnvelope' } } } } }
+  /api/v1/consultants/{id}/suspend:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [consultant-programme]
+      operationId: suspendConsultant
+      summary: Suspend a consultant (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SuspendRequest' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SuspendResponse' } } } } }
+
+  # =========================================================================
+  # Admin — Certifications
+  # =========================================================================
+  /api/v1/consultant-certifications:
+    get:
+      tags: [consultant-programme]
+      operationId: listCertifications
+      summary: List certifications (admin)
+      parameters:
+        - { name: consultant_id, in: query, schema: { type: string } }
+        - { name: level,         in: query, schema: { type: string } }
+        - { name: program,     in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CertificationList' } } } } }
+    post:
+      tags: [consultant-programme]
+      operationId: createCertification
+      summary: Create a certification (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CertificationCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/CertificationEnvelope' } } } } }
+  /api/v1/consultant-certifications/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [consultant-programme]
+      operationId: getCertification
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CertificationEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [consultant-programme]
+      operationId: updateCertification
+      summary: Revoke or update certification validity (admin)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CertificationPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CertificationEnvelope' } } } } }
+    delete:
+      tags: [consultant-programme]
+      operationId: softDeleteCertification
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+
+  # =========================================================================
+  # Admin — Tenant Links
+  # =========================================================================
+  /api/v1/consultant-tenant-links:
+    get:
+      tags: [consultant-programme]
+      operationId: listTenantLinks
+      summary: List consultant↔tenant links (admin)
+      parameters:
+        - { name: tenant_id,     in: query, schema: { type: string } }
+        - { name: consultant_id, in: query, schema: { type: string } }
+        - { name: status,        in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TenantLinkList' } } } } }
+    post:
+      tags: [consultant-programme]
+      operationId: createTenantLink
+      summary: Invite a consultant to a tenant (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TenantLinkCreate' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/TenantLinkEnvelope' } } } }
+        '409': { description: 'Duplicate consultant_id + tenant_id pair' }
+  /api/v1/consultant-tenant-links/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [consultant-programme]
+      operationId: getTenantLink
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TenantLinkEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [consultant-programme]
+      operationId: updateTenantLink
+      summary: Accept invite or change scope (admin)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TenantLinkPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TenantLinkEnvelope' } } } } }
+    delete:
+      tags: [consultant-programme]
+      operationId: softDeleteTenantLink
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/consultant-tenant-links/{id}/revoke:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [consultant-programme]
+      operationId: revokeTenantLink
+      summary: Revoke a consultant↔tenant link (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RevokeRequest' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RevokeResponse' } } } } }
+
+  # =========================================================================
+  # Admin — White-label Configs
+  # =========================================================================
+  /api/v1/white-label-configs:
+    get:
+      tags: [consultant-programme]
+      operationId: listWhiteLabelConfigs
+      summary: List white-label brand configs (admin)
+      parameters:
+        - { name: consultant_id, in: query, schema: { type: string } }
+        - { name: tenant_id,     in: query, schema: { type: string } }
+        - { name: status,        in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WhiteLabelConfigList' } } } } }
+    post:
+      tags: [consultant-programme]
+      operationId: createWhiteLabelConfig
+      summary: Create a white-label brand config (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WhiteLabelConfigCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/WhiteLabelConfigEnvelope' } } } } }
+  /api/v1/white-label-configs/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [consultant-programme]
+      operationId: getWhiteLabelConfig
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WhiteLabelConfigEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [consultant-programme]
+      operationId: updateWhiteLabelConfig
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WhiteLabelConfigPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WhiteLabelConfigEnvelope' } } } } }
+    delete:
+      tags: [consultant-programme]
+      operationId: softDeleteWhiteLabelConfig
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+
+  # =========================================================================
+  # Admin — Leads
+  # =========================================================================
+  /api/v1/consultant-leads:
+    get:
+      tags: [consultant-programme]
+      operationId: listLeads
+      summary: List consultant leads (admin)
+      parameters:
+        - { name: status,                 in: query, schema: { type: string } }
+        - { name: sector,                 in: query, schema: { type: string } }
+        - { name: assigned_consultant_id, in: query, schema: { type: string } }
+        - { name: q,                      in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LeadList' } } } } }
+    post:
+      tags: [consultant-programme]
+      operationId: createLead
+      summary: Create a consultant lead (admin / import)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LeadCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/LeadEnvelope' } } } } }
+  /api/v1/consultant-leads/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [consultant-programme]
+      operationId: getLead
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LeadEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [consultant-programme]
+      operationId: updateLead
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LeadPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LeadEnvelope' } } } } }
+    delete:
+      tags: [consultant-programme]
+      operationId: softDeleteLead
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+  /api/v1/consultant-leads/{id}/qualify:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [consultant-programme]
+      operationId: qualifyLead
+      summary: Mark a lead qualified (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LeadStateResponse' } } } } }
+  /api/v1/consultant-leads/{id}/convert:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [consultant-programme]
+      operationId: convertLead
+      summary: Mark a lead converted (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConvertRequest' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/LeadStateResponse' } } } } }
+
+  # =========================================================================
+  # App (cloud, tenant-scoped read-only)
+  # =========================================================================
+  /api/v1/app/consultants:
+    get:
+      tags: [consultant-programme]
+      operationId: listConsultantsForTenant
+      summary: List consultants attested into the caller's tenant (cloud)
+      parameters:
+        - { name: level,  in: query, schema: { type: string } }
+        - { name: sector, in: query, schema: { type: string } }
+        - { name: limit,  in: query, schema: { type: integer, default: 50 } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultantList' } } } } }
+  /api/v1/app/consultants/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [consultant-programme]
+      operationId: getConsultantForTenant
+      summary: Fetch a consultant scoped to the caller's tenant (cloud)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ConsultantEnvelope' } } } }
+        '404': { description: Not found / not linked to tenant }
+  /api/v1/app/consultant-tenant-links:
+    get:
+      tags: [consultant-programme]
+      operationId: listTenantLinksForTenant
+      summary: List the caller's tenant links (cloud)
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: limit,  in: query, schema: { type: integer, default: 50 } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TenantLinkList' } } } } }
+  /api/v1/app/consultant-tenant-links/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [consultant-programme]
+      operationId: getTenantLinkForTenant
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/TenantLinkEnvelope' } } } }
+        '404': { description: Not found }
+  /api/v1/app/white-label-config:
+    get:
+      tags: [consultant-programme]
+      operationId: getWhiteLabelConfigForTenant
+      summary: Fetch the active white-label brand config for the caller's tenant (cloud)
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/WhiteLabelConfigEnvelope' } } } }
+        '404': { description: Not found }
+
+  # =========================================================================
+  # Public site lead capture
+  # =========================================================================
+  /api/consultant-lead:
+    get:
+      tags: [consultant-programme]
+      operationId: getConsultantLeadAggregate
+      summary: Aggregate lead-counter (no PII; public)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  leads_received: { type: integer }
+    post:
+      tags: [consultant-programme]
+      operationId: captureConsultantLead
+      summary: Capture a consultant program enquiry (public)
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PublicLeadCreate' } } } }
+      responses:
+        '200': { description: Captured, content: { application/json: { schema: { $ref: '#/components/schemas/LeadEnvelope' } } } }
+        '400': { description: Validation error }
+        '429': { description: Rate limited }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    KyeId:
+      type: string
+      pattern: '^kye:[a-z-]+:[A-Za-z0-9._:-]+$'
+    SoftDeleteResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        id: { type: string }
+        deleted_at: { type: string, format: date-time }
+
+    # ----- Consultants -----
+    Consultant:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        display_name: { type: string }
+        legal_name: { type: string }
+        email: { type: string, format: email }
+        country: { type: string }
+        sectors_json: { type: string }
+        languages_json: { type: string }
+        status: { type: string, enum: [applied, onboarding, certified, suspended, retired] }
+        certification_level: { type: string, enum: [associate, professional, master] }
+        attribution_kid: { type: string }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_at: { type: string, format: date-time }
+    ConsultantCreate:
+      type: object
+      required: [display_name, email]
+      properties:
+        display_name: { type: string }
+        legal_name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        country: { type: string }
+        sectors: { type: array, items: { type: string } }
+        languages: { type: array, items: { type: string } }
+        bio: { type: string }
+        website: { type: string }
+        linkedin: { type: string }
+        status: { type: string, enum: [applied, onboarding, certified, suspended, retired] }
+        certification_level: { type: string, enum: [associate, professional, master] }
+        attribution_kid: { type: string }
+    ConsultantPatch:
+      type: object
+      properties:
+        display_name: { type: string }
+        legal_name: { type: string }
+        phone: { type: string }
+        country: { type: string }
+        sectors: { type: array, items: { type: string } }
+        languages: { type: array, items: { type: string } }
+        bio: { type: string }
+        website: { type: string }
+        linkedin: { type: string }
+        status: { type: string }
+        certification_level: { type: string }
+        attribution_kid: { type: string }
+    ConsultantEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        consultant: { $ref: '#/components/schemas/Consultant' }
+    ConsultantList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        consultants: { type: array, items: { $ref: '#/components/schemas/Consultant' } }
+
+    # ----- Certifications -----
+    Certification:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        consultant_id: { $ref: '#/components/schemas/KyeId' }
+        level: { type: string, enum: [associate, professional, master] }
+        program: { type: string }
+        issued_at: { type: string, format: date-time }
+        issued_by: { type: string }
+        not_before: { type: string, format: date-time }
+        not_after: { type: string, format: date-time }
+        evidence_pack_id: { type: string }
+        signature_kid: { type: string }
+        revoked_at: { type: string, format: date-time }
+    CertifyRequest:
+      type: object
+      required: [level]
+      properties:
+        level: { type: string, enum: [associate, professional, master] }
+        program: { type: string }
+        not_before: { type: string, format: date-time }
+        not_after: { type: string, format: date-time }
+        evidence_pack_id: { type: string }
+        signature_kid: { type: string }
+        signature_value_b64: { type: string }
+    CertificationCreate:
+      type: object
+      required: [consultant_id, level]
+      properties:
+        consultant_id: { $ref: '#/components/schemas/KyeId' }
+        level: { type: string, enum: [associate, professional, master] }
+        program: { type: string }
+        not_before: { type: string, format: date-time }
+        not_after: { type: string, format: date-time }
+        evidence_pack_id: { type: string }
+        signature_kid: { type: string }
+        signature_value_b64: { type: string }
+    CertificationPatch:
+      type: object
+      properties:
+        revoke: { type: boolean }
+        revoke_reason: { type: string }
+        not_after: { type: string, format: date-time }
+    CertificationEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        certification: { $ref: '#/components/schemas/Certification' }
+    CertificationList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        certifications: { type: array, items: { $ref: '#/components/schemas/Certification' } }
+
+    # ----- Tenant Links -----
+    TenantLink:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        consultant_id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        scope: { type: string, enum: [view_only, operate, attest] }
+        status: { type: string, enum: [invited, active, revoked] }
+        invited_at: { type: string, format: date-time }
+        invited_by: { type: string }
+        accepted_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+    TenantLinkCreate:
+      type: object
+      required: [consultant_id, tenant_id]
+      properties:
+        consultant_id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        scope: { type: string, enum: [view_only, operate, attest] }
+        status: { type: string, enum: [invited, active] }
+    TenantLinkPatch:
+      type: object
+      properties:
+        accept: { type: boolean }
+        scope: { type: string, enum: [view_only, operate, attest] }
+    TenantLinkEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        link: { $ref: '#/components/schemas/TenantLink' }
+    TenantLinkList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        links: { type: array, items: { $ref: '#/components/schemas/TenantLink' } }
+    RevokeRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 1024 }
+    RevokeResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        id: { type: string }
+        status: { type: string }
+        revoked_at: { type: string, format: date-time }
+        revoked_by: { type: string }
+        reason: { type: string }
+    SuspendRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 1024 }
+    SuspendResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        consultant_id: { type: string }
+        status: { type: string }
+        suspended_at: { type: string, format: date-time }
+        suspended_by: { type: string }
+        reason: { type: string }
+
+    # ----- White-label -----
+    WhiteLabelConfig:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        consultant_id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { type: string }
+        brand_name: { type: string }
+        primary_colour_hex: { type: string }
+        secondary_colour_hex: { type: string }
+        logo_url: { type: string }
+        domain: { type: string }
+        support_email: { type: string }
+        legal_footer: { type: string }
+        status: { type: string, enum: [draft, active, archived] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    WhiteLabelConfigCreate:
+      type: object
+      required: [consultant_id, brand_name]
+      properties:
+        consultant_id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { type: string }
+        brand_name: { type: string }
+        primary_colour_hex: { type: string }
+        secondary_colour_hex: { type: string }
+        logo_url: { type: string }
+        domain: { type: string }
+        support_email: { type: string }
+        legal_footer: { type: string }
+        status: { type: string, enum: [draft, active, archived] }
+    WhiteLabelConfigPatch:
+      type: object
+      properties:
+        brand_name: { type: string }
+        primary_colour_hex: { type: string }
+        secondary_colour_hex: { type: string }
+        logo_url: { type: string }
+        domain: { type: string }
+        support_email: { type: string }
+        legal_footer: { type: string }
+        status: { type: string }
+    WhiteLabelConfigEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        config: { $ref: '#/components/schemas/WhiteLabelConfig' }
+    WhiteLabelConfigList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        configs: { type: array, items: { $ref: '#/components/schemas/WhiteLabelConfig' } }
+
+    # ----- Leads -----
+    Lead:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        submitted_at: { type: string, format: date-time }
+        submitter_email: { type: string, format: email }
+        submitter_name: { type: string }
+        organisation: { type: string }
+        sector: { type: string }
+        country: { type: string }
+        message: { type: string }
+        consent_marketing: { type: integer, enum: [0, 1] }
+        assigned_consultant_id: { type: string }
+        status: { type: string, enum: [captured, qualified, converted, rejected] }
+        qualified_at: { type: string, format: date-time }
+        converted_at: { type: string, format: date-time }
+        converted_tenant_id: { type: string }
+        source: { type: string }
+        created_at: { type: string, format: date-time }
+    LeadCreate:
+      type: object
+      required: [submitter_email]
+      properties:
+        submitter_email: { type: string, format: email }
+        submitter_name: { type: string }
+        organisation: { type: string }
+        sector: { type: string }
+        country: { type: string }
+        message: { type: string }
+        consent_marketing: { type: boolean }
+        source: { type: string }
+        utm: { type: object }
+    LeadPatch:
+      type: object
+      properties:
+        assigned_consultant_id: { type: string }
+        sector: { type: string }
+        message: { type: string }
+        status: { type: string, enum: [captured, qualified, converted, rejected] }
+    LeadEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        lead: { $ref: '#/components/schemas/Lead' }
+    LeadList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        leads: { type: array, items: { $ref: '#/components/schemas/Lead' } }
+    LeadStateResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        id: { type: string }
+        status: { type: string }
+    ConvertRequest:
+      type: object
+      required: [converted_tenant_id]
+      properties:
+        converted_tenant_id: { $ref: '#/components/schemas/KyeId' }
+
+    # ----- Public site lead form -----
+    PublicLeadCreate:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+        organisation: { type: string }
+        sector: { type: string }
+        country: { type: string }
+        message: { type: string }
+        consent_marketing: { type: boolean }
+        source: { type: string }

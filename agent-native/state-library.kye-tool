@@ -1,0 +1,14 @@
+@kye-tool v1
+@spec state-library.openapi.v1
+@source-sha256 09a93103462e546f79ce2d32b5e50dc89d834c93ee47a9ee17625ad4e1c3f36f
+@compiled-at 2026-05-16T15:19:04Z
+@kid kye:key:agent-tool-signing:dev
+@sig DEV-NOT-FOR-PRODUCTION
+@base https://kye.example
+@auth bearer token
+@endpoints 2
+
+GET /api/v1/state-library listStateLibrary @auth=inherit @purpose=Operate.Read @idempotent | category:string?,entity_class:string?,regulatory_alignment:string? -> object
+GET /api/v1/state-library/{library_id} getStateLibraryEntry @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+
+@end

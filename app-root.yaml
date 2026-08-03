@@ -1,0 +1,290 @@
+openapi: "3.1.0"
+info:
+  title: KYE Protocol™ App API — root paths
+  version: "1.0.0"
+  description: |
+    Companion document to app.yaml (whose server base is
+    https://app.kyeprotocol.com/api/v1) for app-surface Pages-Functions
+    endpoints that live OUTSIDE the /api/v1 base path.
+
+    Currently: the KYE Estate Planning Authority Console™ (§49 §9
+    estate-planning) matter + review endpoints under /api/ep. This is a
+    §33 HYBRID surface — the public Pages Function owns the Clerk-JWT
+    auth boundary (via /_middleware.js) and persists to D1 (binding
+    KYE_DB); the IP-track estate engine is the downstream processor.
+
+    Every privileged operation emits a §0.3 evidence-envelope chain
+    (kye.purpose.request.v1 → kye.purpose.admissibility.v1 →
+    kye.evidence.decision_map.v1 → kye.compliance.attestation.v1, plus
+    kye.engagement.approval.v1 on review decisions). The chain is
+    returned base64-encoded in the x-kye-governance-chain response
+    header and persisted append-only to ep_governance_events (WORM
+    triggers, migration 035). Tenant isolation per §0.11: every D1
+    query carries a trust_domain_id predicate resolved from the JWT.
+
+servers:
+  - url: https://app.kyeprotocol.com
+    description: Production app surface (root paths)
+
+security:
+  - ClerkBearer: []
+
+components:
+  securitySchemes:
+    ClerkBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Clerk RS256 JWT verified by /_middleware.js. tenant_id,
+        engagement_id and actor_urn are resolved from the token — never
+        from client-supplied headers (§0.11). A request with no
+        verified session is denied 401 with reason no_session.
+
+  headers:
+    GovernanceChain:
+      description: >-
+        Base64-encoded JSON array of the §0.3 evidence envelopes
+        emitted for this operation.
+      schema: { type: string }
+    OperationId:
+      description: KYE governance operation id recorded for this request.
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: No verified Clerk session on the request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    DbUnavailable:
+      description: D1 binding KYE_DB is not configured on the Pages project
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: { type: boolean, enum: [false] }
+        error: { type: string }
+        reason: { type: string }
+
+    RequestError:
+      description: Validation / lookup error shape used by the EP handlers
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string, enum: [bad_request, not_found, forbidden] }
+        message: { type: string }
+
+    EpMatter:
+      type: object
+      required: [matter_id, matter_type, client_full_name, status, created_by, created_at]
+      properties:
+        matter_id: { type: string, description: "kye:ep:matter:<uuid>" }
+        trust_domain_id: { type: string }
+        engagement_id: { type: string }
+        matter_type:
+          type: string
+          enum: [will_standard, will_complex, lpa_property, lpa_health, trust, other]
+        client_full_name: { type: string, minLength: 2 }
+        client_ref:
+          type: [string, "null"]
+          maxLength: 100
+        status: { type: string, description: "Lifecycle state; new matters open as 'open'" }
+        created_by: { type: string, description: "Actor URN of the preparer" }
+        created_at: { type: string, format: date-time }
+
+    EpReview:
+      type: object
+      required: [review_id, matter_id, decision, approver_actor_urn, preparer_actor_urn, is_irreversible, reviewed_at]
+      properties:
+        review_id: { type: string, description: "kye:ep:review:<uuid>" }
+        matter_id: { type: string }
+        decision: { type: string, enum: [approve, return, escalate, block] }
+        approver_actor_urn: { type: string }
+        preparer_actor_urn: { type: string }
+        is_irreversible:
+          type: boolean
+          description: true for block | escalate decisions
+        dual_channel_attestation_id:
+          type: [string, "null"]
+          description: §27 dual-channel attestation envelope id (required for irreversible decisions)
+        notes: { type: [string, "null"], maxLength: 2000 }
+        reviewed_at: { type: string, format: date-time }
+
+paths:
+  # ── Estate-planning matters (§49 §9) ────────────────────────────────────────
+  /api/ep/matters:
+    get:
+      operationId: app-get-api-ep-matters
+      summary: List estate-planning matters for the caller's tenant
+      description: >-
+        Tenant-scoped list (WHERE trust_domain_id = caller's tenant,
+        §0.11), newest first. Emits the §0.3 envelope chain for
+        operation ep_listMatters and persists it to
+        ep_governance_events.
+      tags: [EstatePlanning]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+          description: Filter by matter lifecycle status (exact match)
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Tenant-scoped matter list
+          headers:
+            x-kye-governance-chain:
+              $ref: "#/components/headers/GovernanceChain"
+            x-kye-operation-id:
+              $ref: "#/components/headers/OperationId"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, tenant_id, count, matters]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  tenant_id: { type: string }
+                  count: { type: integer }
+                  matters:
+                    type: array
+                    items: { $ref: "#/components/schemas/EpMatter" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+    post:
+      operationId: app-post-api-ep-matters
+      summary: Create an estate-planning matter
+      description: >-
+        Creates a matter bound to the authenticated tenant + engagement
+        with status 'open'. matter_type must be one of the canonical
+        types and client_full_name must be at least 2 characters.
+        Emits + persists the §0.3 envelope chain for operation
+        ep_createMatter.
+      tags: [EstatePlanning]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [matter_type, client_full_name]
+              properties:
+                matter_type:
+                  type: string
+                  enum: [will_standard, will_complex, lpa_property, lpa_health, trust, other]
+                client_full_name: { type: string, minLength: 2 }
+                client_ref:
+                  type: string
+                  maxLength: 100
+                  description: Optional client reference (truncated to 100 chars)
+      responses:
+        "201":
+          description: Matter created
+          headers:
+            x-kye-governance-chain:
+              $ref: "#/components/headers/GovernanceChain"
+            x-kye-operation-id:
+              $ref: "#/components/headers/OperationId"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, matter]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  matter: { $ref: "#/components/schemas/EpMatter" }
+        "400":
+          description: Invalid JSON body, unknown matter_type, or client_full_name too short
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RequestError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }
+
+  /api/ep/matters/{id}/review:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+        description: Matter id (kye:ep:matter:<uuid>)
+    post:
+      operationId: app-post-api-ep-matters-by-id-review
+      summary: Record a manager / supervising-solicitor review decision
+      description: >-
+        Records a review decision on a matter. The matter is fetched
+        with BOTH matter_id AND trust_domain_id predicates — a matter
+        owned by a different tenant returns 404, never a 403 that
+        leaks existence (§0.11). §27 dual-channel enforcement: the
+        approver must differ from the matter creator (self-approval is
+        denied 403), and irreversible decisions (block | escalate)
+        require a dual_channel_attestation_id. Writes to
+        ep_matter_reviews + ep_governance_events (append-only WORM)
+        and emits the §0.3 chain for operation
+        ep_submitReviewDecision, including
+        kye.engagement.approval.v1.
+      tags: [EstatePlanning]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  type: string
+                  enum: [approve, return, escalate, block]
+                dual_channel_attestation_id:
+                  type: string
+                  description: >-
+                    §27 dual-channel attestation envelope id. Required
+                    when decision is block or escalate.
+                notes:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "201":
+          description: Review decision recorded
+          headers:
+            x-kye-governance-chain:
+              $ref: "#/components/headers/GovernanceChain"
+            x-kye-operation-id:
+              $ref: "#/components/headers/OperationId"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, review]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  review: { $ref: "#/components/schemas/EpReview" }
+        "400":
+          description: Missing matter id, invalid JSON body, or decision not in approve | return | escalate | block
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RequestError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: >-
+            §27 dual-channel denial — self-approval (approver equals
+            the matter preparer), or an irreversible decision without
+            a dual_channel_attestation_id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RequestError" }
+        "404":
+          description: Matter not found in the caller's tenant (cross-tenant ids return 404, not 403)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RequestError" }
+        "503": { $ref: "#/components/responses/DbUnavailable" }

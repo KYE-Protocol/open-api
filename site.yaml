@@ -1,0 +1,1241 @@
+openapi: "3.1.0"
+info:
+  title: KYE Protocol™ Site API
+  version: "1.0.0"
+  description: |
+    Public-site Pages Functions surface for kyeprotocol.com — the
+    lead-capture forms (Audit Pilot™, PoC, GovernedUI access, contact),
+    DSAR intake, expert-review wall, the Consultant Marketplace™ public
+    listing, the public stats ticker, the quiz evidence sink, the §38
+    Comms Engine™ unsubscribe surface, the Clerk webhook receiver and
+    the public self-audit trust surface.
+
+    Operations are unauthenticated public form endpoints unless noted.
+    Form endpoints are rate-limited per salted IP hash (the raw IP is
+    never stored) and carry a hidden `website` honeypot field — a
+    non-empty honeypot is silently discarded with a 200 so bots learn
+    nothing. Outbound email always routes through the KYE Comms
+    Engine™ (constitution §38); privileged actions emit the §0.3
+    evidence-event family.
+
+servers:
+  - url: https://kyeprotocol.com
+    description: Production public site
+
+# Public-by-default: the site surface is the unauthenticated marketing
+# origin. The single operator-only operation (the worker healthcheck)
+# overrides this with HealthcheckBearer.
+security: []
+
+tags:
+  - name: Internal
+    description: Operator-only diagnostics (shared-secret gated)
+  - name: LeadCapture
+    description: Public application + enquiry forms
+  - name: Dsar
+    description: Data Subject Access Request intake
+  - name: ExpertReviews
+    description: Expert-wall review submission + public listing
+  - name: Marketplace
+    description: Consultant Marketplace™ public directory
+  - name: PublicData
+    description: Unauthenticated read-only public data
+  - name: Comms
+    description: KYE Comms Engine™ self-service opt-out surface
+  - name: Webhooks
+    description: Inbound vendor webhook receivers
+  - name: Trust
+    description: Public self-audit trust surface (§0.3 read side)
+
+components:
+  securitySchemes:
+    HealthcheckBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        Shared secret (HEALTHCHECK_INTERNAL_TOKEN on the kye-protocol
+        Pages project) passed by the healthcheck-workers.yml workflow.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: { type: boolean, enum: [false] }
+        error: { type: string, description: Machine-readable error code }
+    RateLimitedResponse:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: { type: boolean, enum: [false] }
+        error: { type: string, enum: [rate_limited] }
+        retry_after_seconds: { type: integer }
+    HoneypotAccepted:
+      type: object
+      description: >-
+        Returned when the hidden `website` honeypot field is non-empty.
+        The submission is silently discarded; the 200 prevents bots from
+        learning the form was rejected.
+      properties:
+        ok: { type: boolean, enum: [true] }
+        ignored: { type: string, enum: [honeypot] }
+
+  responses:
+    RateLimited:
+      description: >-
+        Per-IP-hash rate limit exceeded. The `retry-after` header carries
+        the wait in seconds.
+      headers:
+        retry-after:
+          schema: { type: string }
+          description: Seconds until the window reopens
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RateLimitedResponse" }
+
+paths:
+  /api/_internal/healthcheck-workers:
+    get:
+      operationId: site-get-api-internal-healthcheck-workers
+      summary: Fan-out healthcheck of every deployed KYE Worker (operator-only)
+      description: |
+        Probes each deployed KYE Worker's `/healthz` via the Service
+        bindings configured on the kye-protocol Pages project (the only
+        reachable path because every Worker runs with `workers_dev=false`
+        and no public route). Returns one JSON payload with a per-worker
+        status, latency and version, plus a summary block; the
+        healthcheck-workers.yml workflow archives it to
+        `_diagnostics/healthcheck/<ts>.json`. Gated by the
+        `HEALTHCHECK_INTERNAL_TOKEN` shared secret when set.
+      tags: [Internal]
+      x-kye-source-file: public/site/functions/api/_internal/healthcheck-workers.js
+      security:
+        - HealthcheckBearer: []
+      responses:
+        "200":
+          description: Every probed Worker reported healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_at: { type: string, format: date-time }
+                  workers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        status: { type: string, enum: [healthy, unhealthy] }
+                        checks: { type: [object, "null"] }
+                        version: { type: [string, "null"] }
+                        deployed_at: { type: [string, "null"] }
+                        http_status: { type: integer }
+                        latency_ms: { type: integer }
+                        error: { type: [string, "null"] }
+                  summary:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      healthy: { type: integer }
+                      unhealthy: { type: integer }
+                      unhealthy_names:
+                        type: array
+                        items: { type: string }
+        "207":
+          description: >-
+            Multi-status — at least one Worker reported unhealthy (same
+            body shape as the 200).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_at: { type: string, format: date-time }
+                  workers: { type: array, items: { type: object } }
+                  summary: { type: object }
+        "401":
+          description: Bearer token missing or mismatched
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/audit-pilot:
+    get:
+      operationId: site-get-api-audit-pilot
+      summary: Endpoint self-description for the Audit Pilot™ application form
+      description: >-
+        Returns a small JSON descriptor (expected method + the
+        pilot-apply page URL) so a GET probe of the form endpoint is
+        self-documenting rather than a 405.
+      tags: [LeadCapture]
+      x-kye-source-file: public/site/functions/api/audit-pilot.js
+      responses:
+        "200":
+          description: Endpoint descriptor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  endpoint: { type: string }
+                  method: { type: string, enum: [POST] }
+                  doc: { type: string, format: uri }
+    post:
+      operationId: site-post-api-audit-pilot
+      summary: Submit an Audit Pilot™ application (public)
+      description: |
+        Receives the pilot-apply form (JSON or form-data), validates the
+        enum fields (role, company size, industry, urgency, SKU), blocks
+        free-email-provider addresses, requires all four consent clauses
+        (tos, privacy, aup, authority), emits a signed
+        `kye.consent.acceptance.v1` record, persists application +
+        consent to D1, then in the background dispatches the §38 admin
+        alert + applicant confirmation (suppressed for detected test
+        traffic) and enqueues the §22 onboarding and §27
+        commercial-lifecycle workflows. Rate limit: 3 submissions per
+        24 h per IP hash. Honeypot field `website`.
+      tags: [LeadCapture]
+      x-kye-source-file: public/site/functions/api/audit-pilot.js
+      x-kye-emits-envelopes: [kye.consent.acceptance.v1, kye.comms.dispatch.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [full_name, email, role, company, company_size, industry, ai_workflow, urgency, sku_id]
+              properties:
+                full_name: { type: string, maxLength: 200 }
+                email: { type: string, format: email, description: Work email — free providers are rejected }
+                role:
+                  type: string
+                  enum: [CISO, CDO, Head of AI, Head of Compliance, Procurement Lead, Engineering Lead, Other]
+                company: { type: string, maxLength: 200 }
+                company_size:
+                  type: string
+                  enum: ["<100", "100-1k", "1k-10k", "10k-50k", "50k+"]
+                industry:
+                  type: string
+                  enum:
+                    - Financial Services - Banking
+                    - Financial Services - Insurance
+                    - Financial Services - Payments/PSP
+                    - Healthcare
+                    - Pharma
+                    - Public Sector
+                    - Other Regulated
+                    - Other
+                regulatory_regime:
+                  description: One or more applicable regulators (unknown values are dropped)
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items: { type: string }
+                ai_workflow: { type: string, minLength: 30, maxLength: 4000 }
+                urgency:
+                  type: string
+                  enum: [This quarter, Next quarter, This half, Within 12 months, Exploring]
+                sku_id:
+                  type: string
+                  enum:
+                    - KYE-DISCOVERY-001
+                    - KYE-AUDIT-PILOT-001
+                    - KYE-REG-PILOT-001
+                    - KYE-GOVOPS-PILOT-001
+                    - KYE-EDGE-PILOT-001
+                    - KYE-SANDBOX-PILOT-001
+                    - KYE-CKAN-AUDIT-PILOT-001
+                    - KYE-CKAN-GOVOPS-PILOT-001
+                    - UNDECIDED
+                heard_from: { type: string, maxLength: 500 }
+                consent_tos: { description: Must be accepted, oneOf: [{ type: boolean }, { type: string }] }
+                consent_privacy: { description: Must be accepted, oneOf: [{ type: boolean }, { type: string }] }
+                consent_aup: { description: Must be accepted, oneOf: [{ type: boolean }, { type: string }] }
+                consent_authority: { description: Must be accepted, oneOf: [{ type: boolean }, { type: string }] }
+                consent_dpa: { description: Optional DPA clause, oneOf: [{ type: boolean }, { type: string }] }
+                website: { type: string, description: Honeypot — leave empty }
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              description: Same fields as the JSON body; multi-select regulatory_regime arrives as repeated keys.
+      responses:
+        "200":
+          description: >-
+            Application accepted (or honeypot silently discarded). The
+            signed consent record is echoed back so the client can store
+            the receipt.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      ok: { type: boolean, enum: [true] }
+                      application_id: { type: string, description: "kye:audit-pilot-app:<date>.<hex>" }
+                      consent_id: { type: string }
+                      consent:
+                        type: object
+                        description: The kye.consent.acceptance.v1 record (hashed subject identifiers only)
+                      next_steps: { type: string }
+                  - $ref: "#/components/schemas/HoneypotAccepted"
+        "400":
+          description: >-
+            Validation failure. Error codes include `invalid_body`,
+            `missing_field:<name>`, `invalid_sku_id`,
+            `invalid_email_shape`, `free_email_provider_blocked`,
+            `invalid_role`, `invalid_company_size`, `invalid_industry`,
+            `invalid_urgency`, `ai_workflow_too_short`,
+            `consent_missing:<clause>`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/contact:
+    get:
+      operationId: site-get-api-contact
+      summary: Endpoint self-description for the contact form
+      tags: [LeadCapture]
+      x-kye-source-file: public/site/functions/api/contact.js
+      responses:
+        "200":
+          description: Hint that the endpoint accepts POSTed contact forms
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  message: { type: string }
+    post:
+      operationId: site-post-api-contact
+      summary: Submit the contact-modal form (public)
+      description: |
+        Receives the contact-modal submission from any KYE Protocol™
+        page (JSON or form-urlencoded), validates + spam-filters it,
+        dispatches the §38 `contact.inbound.v1` admin notification (with
+        one-click Approve/Reject buttons for partner/trainer/auditor
+        topics, §27 §4 dual-channel admin) and a
+        `contact.applicant-ack.v1` receipt to the submitter, then
+        persists an audit row to D1. Rate limit: 5 submissions per IP
+        per 5 minutes. Honeypot field `website`. When the mail binding
+        is unattached the endpoint answers 503 with
+        `fallback: "mailto"` so the client degrades to a mailto: link —
+        a submission is never silently dropped.
+      tags: [LeadCapture]
+      x-kye-source-file: public/site/functions/api/contact.js
+      x-kye-emits-envelopes: [kye.comms.dispatch.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, organisation, phone, position, message, accept]
+              properties:
+                name: { type: string, maxLength: 200 }
+                email: { type: string, format: email, maxLength: 320 }
+                organisation: { type: string, maxLength: 200 }
+                phone: { type: string, maxLength: 50 }
+                position: { type: string, maxLength: 100 }
+                topic: { type: string, description: Routing topic (default `general`; partner/trainer/auditor get admin action buttons) }
+                message: { type: string, maxLength: 8000 }
+                accept: { description: Terms + privacy acceptance — required truthy, oneOf: [{ type: boolean }, { type: string }] }
+                website: { type: string, description: Honeypot — leave empty }
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              description: Same fields as the JSON body.
+      responses:
+        "200":
+          description: Mail dispatched (or honeypot silently discarded)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      ok: { type: boolean, enum: [true] }
+                      message_id: { type: string }
+                  - $ref: "#/components/schemas/HoneypotAccepted"
+        "400":
+          description: >-
+            Validation failure — `invalid_body`, `missing_field:<name>`,
+            `invalid_email`, `terms_not_accepted`, `message_too_long`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502":
+          description: The mail-sender dispatch failed; client should fall back to mailto
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  fallback: { type: string, enum: [mailto] }
+                  error: { type: string, enum: [send_failed_cf] }
+        "503":
+          description: Mail binding unattached on this deployment; client should fall back to mailto
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  fallback: { type: string, enum: [mailto] }
+                  error: { type: string, enum: [mail_binding_unconfigured] }
+
+  /api/dsar:
+    get:
+      operationId: site-get-api-dsar
+      summary: Endpoint self-description for the DSAR intake
+      tags: [Dsar]
+      x-kye-source-file: public/site/functions/api/dsar.js
+      responses:
+        "200":
+          description: Hint describing the expected POST body
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  message: { type: string }
+                  documentation: { type: string, format: uri }
+    post:
+      operationId: site-post-api-dsar
+      summary: File a Data Subject Access Request (public)
+      description: |
+        Self-service DSAR intake under GDPR Art. 15–21 and the
+        equivalent rights in UK GDPR, CCPA/CPRA, PIPEDA, LGPD, PIPL and
+        POPIA (backs /dsar.html). Mints a stable
+        `kye:dsar-request:<date>.<hex>` reference, persists a WORM row
+        to D1 (status transitions are append-only via supersession),
+        emits a §0.3 `kye.evidence.decision_map.v1` event
+        (`dsar_request.filed`), then sends the §38 admin alert with
+        one-click Acknowledge/Reject buttons and a subject
+        acknowledgement carrying the statutory deadline. Rate limit: 5
+        requests per 24 h per IP hash.
+      tags: [Dsar]
+      x-kye-source-file: public/site/functions/api/dsar.js
+      x-kye-emits-envelopes: [kye.evidence.decision_map.v1, kye.comms.dispatch.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [controller, right, email, consent]
+              properties:
+                controller: { type: string, maxLength: 200, description: The data controller the request targets }
+                right:
+                  type: string
+                  enum: [access, rectification, erasure, restriction, portability, objection, withdraw_consent, ccpa_know, ccpa_delete, ccpa_opt_out]
+                regime:
+                  type: string
+                  default: gdpr
+                  enum: [gdpr, uk_gdpr, ccpa, pipeda, lgpd, pipl, popia, other]
+                email: { type: string, format: email, maxLength: 200 }
+                name: { type: string, maxLength: 200 }
+                detail: { type: string, maxLength: 4000, description: Specific items / time window }
+                consent: { type: boolean, description: Must be `true` }
+      responses:
+        "201":
+          description: Request filed; statutory window computed per regime
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  request_id: { type: string, description: "kye:dsar-request:<date>.<hex>" }
+                  filed_at: { type: string, format: date-time }
+                  due_at: { type: string, format: date-time }
+                  statutory_window_days: { type: integer, description: 30 (GDPR-family) / 45 (CCPA) / 90 (POPIA) }
+                  regime: { type: string }
+                  right: { type: string }
+        "400":
+          description: >-
+            Validation failure — body carries `reason` ∈ {invalid_json,
+            controller_required, invalid_right, invalid_regime,
+            invalid_email, consent_required}.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  reason: { type: string }
+        "429":
+          description: More than 5 requests in 24 h from the same IP hash
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  reason: { type: string, enum: [rate_limited] }
+    options:
+      operationId: site-options-dsar
+      summary: CORS preflight for the DSAR intake
+      description: >-
+        Answers 204 with the allowed methods (POST, GET, OPTIONS) and
+        allowed request header (content-type). No allow-origin header is
+        set — the form is same-origin on kyeprotocol.com.
+      tags: [Dsar]
+      x-kye-source-file: public/site/functions/api/dsar.js
+      responses:
+        "204":
+          description: Preflight accepted (empty body)
+          headers:
+            allow:
+              schema: { type: string }
+              description: "POST, GET, OPTIONS"
+            access-control-allow-methods:
+              schema: { type: string }
+              description: "POST, GET, OPTIONS"
+            access-control-allow-headers:
+              schema: { type: string }
+              description: content-type
+
+  /api/engage-access:
+    post:
+      operationId: site-post-api-engage-access
+      summary: Request access to a GovernedUI™ SKU tier (public)
+      description: |
+        Single canonical entrypoint for every GovernedUI™ access request
+        from the public site (constitution §27 §4 dual-channel admin).
+        Maps the `tier` field to one of the 5 canonical GovernedUI SKUs
+        (pilot → KYE-GUI-PILOT-001, department → KYE-GUI-DEPT-001,
+        enterprise → KYE-GUI-ENT-001, regulated → KYE-GUI-REG-001,
+        national → KYE-GUI-NAT-001), persists the request to D1, emits
+        the engagement-access evidence event to the audit chain, then
+        dispatches the §38 admin alert with Approve / Request-changes
+        buttons plus an applicant confirmation. The Stripe payment link
+        is returned after admin approval, never inline. Rate limit: 3
+        per 24 h per IP hash. Honeypot field `website`. Work email
+        required.
+      tags: [LeadCapture]
+      x-kye-source-file: public/site/functions/api/engage-access.js
+      x-kye-emits-envelopes: [kye.comms.dispatch.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tier, name, email, organisation, role, consent_accepted]
+              properties:
+                tier:
+                  type: string
+                  enum: [pilot, department, enterprise, regulated, national]
+                name: { type: string }
+                email: { type: string, format: email, description: Work email — free providers are rejected }
+                organisation: { type: string }
+                phone: { type: string }
+                role: { type: string }
+                agent_classes: { type: string, description: Scope — agent classes to govern }
+                protected_systems: { type: string, description: Scope — systems the agents touch }
+                business_units: { type: string }
+                regulatory_exposure: { type: string }
+                deployment_topology: { type: string }
+                message: { type: string }
+                consent_accepted: { type: boolean, description: Must be truthy }
+                website: { type: string, description: Honeypot — leave empty }
+      responses:
+        "200":
+          description: >-
+            Request recorded (or honeypot discarded with
+            `request_id: "discarded"`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  request_id: { type: string, format: uuid }
+                  sku_id: { type: string }
+                  next_step: { type: string }
+        "400":
+          description: >-
+            Validation failure — `json_parse_failed`, `unknown_tier`
+            (body lists the valid tiers), `missing_required_field`,
+            `invalid_email`, `work_email_required`, `consent_required`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500":
+          description: Unhandled handler exception (message echoed)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/expert-review:
+    get:
+      operationId: site-get-api-expert-review
+      summary: List published expert reviews (public)
+      description: |
+        Lists reviews for the expert wall. Only `status=published` is
+        publicly readable; requesting `pending` or `rejected` returns
+        401 (moderation listing is owners-only via the Admin Console).
+        Without the D1 binding the endpoint degrades to an honest empty
+        list (`not_provisioned: true`) so the page still renders.
+      tags: [ExpertReviews]
+      x-kye-source-file: public/site/functions/api/expert-review.js
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, default: published }
+          description: Only `published` is allowed unauthenticated
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 50, maximum: 200 }
+      responses:
+        "200":
+          description: Published reviews, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  not_provisioned: { type: boolean, description: Present when the D1 binding is absent }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        submitted_at: { type: string, format: date-time }
+                        name: { type: string }
+                        role: { type: string }
+                        affiliation: { type: string }
+                        artefact: { type: string }
+                        review_text: { type: string }
+                        verdict: { type: string }
+                        linkedin: { type: string }
+        "401":
+          description: Non-published status requested without owner auth
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    post:
+      operationId: site-post-api-expert-review
+      summary: Submit an expert review for moderation (public)
+      description: |
+        Accepts a review of a named KYE™ artefact (JSON or form-data),
+        validates the verdict enum and the optional LinkedIn profile
+        URL (https linkedin.com /in or /pub paths only), emits a
+        `kye.evidence.audit_event.v1` to the AI Call Ledger queue,
+        inserts the row as `status=pending`, then notifies the
+        moderation inbox via the §38 `expert-review.brief.v1` template
+        with one-click Approve-&-publish / Reject buttons and sends the
+        submitter the `expert-review.applicant-ack.v1` receipt (both
+        fail-soft — the persisted row is canonical). Rate limit: 3
+        submissions per 24 h per day-salted IP hash. Honeypot field
+        `website`.
+      tags: [ExpertReviews]
+      x-kye-source-file: public/site/functions/api/expert-review.js
+      x-kye-emits-envelopes: [kye.evidence.audit_event.v1, kye.comms.dispatch.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, role, affiliation, email, artefact, review_text, verdict]
+              properties:
+                name: { type: string, maxLength: 200 }
+                role: { type: string, maxLength: 200 }
+                affiliation: { type: string, maxLength: 200 }
+                email: { type: string, format: email, maxLength: 320, description: Used for the receipt + embed code; never published }
+                artefact: { type: string, maxLength: 200, description: The KYE artefact reviewed }
+                review_text: { type: string, maxLength: 6000 }
+                verdict:
+                  type: string
+                  enum: [approved, approved_with_suggestions, changes_requested, under_discussion]
+                linkedin: { type: string, maxLength: 300, description: Optional public LinkedIn profile URL (https only) }
+                website: { type: string, description: Honeypot — leave empty }
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              description: Same fields as the JSON body.
+      responses:
+        "200":
+          description: Review queued for moderation (or honeypot discarded)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      ok: { type: boolean, enum: [true] }
+                      id: { type: string, description: 26-char review id }
+                      status: { type: string, enum: [pending] }
+                      message: { type: string }
+                  - $ref: "#/components/schemas/HoneypotAccepted"
+        "400":
+          description: >-
+            Validation failure — `invalid_body`, `missing_field:<name>`,
+            `invalid_email`, `invalid_verdict`, `review_too_long`,
+            `invalid_linkedin` (each with a human `hint`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500":
+          description: D1 insert failed (truncated cause in `hint`, review id echoed)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: D1 binding not yet attached on this deployment (`not_provisioned`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    options:
+      operationId: site-options-expert-review
+      summary: CORS preflight for the expert-review endpoint
+      description: >-
+        Answers 204 allowing GET/POST/OPTIONS with the content-type
+        header from the https://kyeprotocol.com origin, cacheable for
+        24 h.
+      tags: [ExpertReviews]
+      x-kye-source-file: public/site/functions/api/expert-review.js
+      responses:
+        "204":
+          description: Preflight accepted (empty body)
+          headers:
+            access-control-allow-origin:
+              schema: { type: string }
+              description: https://kyeprotocol.com
+            access-control-allow-methods:
+              schema: { type: string }
+              description: "GET, POST, OPTIONS"
+            access-control-allow-headers:
+              schema: { type: string }
+              description: content-type
+            access-control-max-age:
+              schema: { type: string }
+              description: "86400"
+
+  /api/marketplace/consultants:
+    get:
+      operationId: site-get-api-marketplace-consultants
+      summary: List visible consultants for the public marketplace
+      description: |
+        Returns every consultant whose status is `onboarding` or
+        `certified` (master → professional → associate, then newest
+        first) for the Consultant Marketplace™ page, with facet counts
+        for the filter UI. Email addresses are never returned and
+        applicant lead rows are never exposed. Edge-cached for 5
+        minutes. Without the D1 binding (or before the table exists)
+        the endpoint degrades to an honest empty list
+        (`not_provisioned: true`).
+      tags: [Marketplace]
+      x-kye-source-file: public/site/functions/api/marketplace/consultants.js
+      parameters:
+        - name: sector
+          in: query
+          required: false
+          schema: { type: string }
+          description: Keep only consultants whose sectors include this tag
+        - name: jurisdiction
+          in: query
+          required: false
+          schema: { type: string, maxLength: 2 }
+          description: ISO-3166 alpha-2 country filter
+        - name: level
+          in: query
+          required: false
+          schema: { type: string, enum: [associate, professional, master] }
+          description: Certification-level filter
+        - name: q
+          in: query
+          required: false
+          schema: { type: string, maxLength: 64 }
+          description: Case-insensitive name / bio match
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 60, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Visible consultants + facet counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  not_provisioned: { type: boolean, description: Present when D1 or the table is absent }
+                  total: { type: integer }
+                  consultants:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        display_name: { type: string }
+                        country: { type: string }
+                        sectors: { type: array, items: { type: string } }
+                        languages: { type: array, items: { type: string } }
+                        bio: { type: string }
+                        website: { type: string }
+                        linkedin: { type: string }
+                        status: { type: string, enum: [onboarding, certified] }
+                        certification_level: { type: string }
+                        attribution_kid: { type: string }
+                        created_at: { type: string, format: date-time }
+                  facets:
+                    type: object
+                    properties:
+                      sectors: { type: object, additionalProperties: { type: integer } }
+                      jurisdictions: { type: object, additionalProperties: { type: integer } }
+                      levels: { type: object, additionalProperties: { type: integer } }
+        "500":
+          description: Query failed (truncated message echoed)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    options:
+      operationId: site-options-marketplace-consultants
+      summary: CORS preflight for the marketplace listing
+      description: >-
+        Answers 204 allowing GET/OPTIONS with the content-type header
+        from the https://kyeprotocol.com origin, cacheable for 24 h.
+      tags: [Marketplace]
+      x-kye-source-file: public/site/functions/api/marketplace/consultants.js
+      responses:
+        "204":
+          description: Preflight accepted (empty body)
+          headers:
+            access-control-allow-origin:
+              schema: { type: string }
+              description: https://kyeprotocol.com
+            access-control-allow-methods:
+              schema: { type: string }
+              description: "GET, OPTIONS"
+            access-control-allow-headers:
+              schema: { type: string }
+              description: content-type
+            access-control-max-age:
+              schema: { type: string }
+              description: "86400"
+
+  /api/consultant-lead:
+    options:
+      operationId: site-options-consultant-lead
+      summary: CORS preflight for the consultant-lead capture form
+      description: >-
+        Answers 204 allowing GET/POST/OPTIONS with the content-type
+        header from the https://kyeprotocol.com origin, cacheable for
+        24 h. The GET/POST operations themselves are declared in the
+        consultant-programme OpenAPI document (§0 — one declaration per
+        operation).
+      tags: [LeadCapture]
+      x-kye-source-file: public/site/functions/api/consultant-lead.js
+      responses:
+        "204":
+          description: Preflight accepted (empty body)
+          headers:
+            access-control-allow-origin:
+              schema: { type: string }
+              description: https://kyeprotocol.com
+            access-control-allow-methods:
+              schema: { type: string }
+              description: "GET, POST, OPTIONS"
+            access-control-allow-headers:
+              schema: { type: string }
+              description: content-type
+            access-control-max-age:
+              schema: { type: string }
+              description: "86400"
+
+  /api/v1/poc/apply:
+    post:
+      operationId: site-post-api-v1-poc-apply
+      summary: Submit a Proof-of-Concept application (public)
+      description: |
+        Backs /poc.html. Maps the `tier` field to the canonical PoC SKU
+        (discovery/undecided → KYE-POC-DISCOVERY-001, audit →
+        KYE-POC-AUDIT-001, reg → KYE-POC-REG-001, govops →
+        KYE-POC-GOVOPS-001, edge → KYE-POC-EDGE-001, sandbox →
+        KYE-POC-SANDBOX-001), persists the `kye.poc.application.v1`
+        shape to D1, then dispatches the §38 admin alert with Approve /
+        Request-changes buttons and the applicant confirmation
+        (§27 §4 dual-channel admin). Rate limit: 3 per 24 h per IP
+        hash. Honeypot field `website`. Work email required.
+      tags: [LeadCapture]
+      x-kye-source-file: public/site/functions/api/v1/poc/apply.js
+      x-kye-emits-envelopes: [kye.comms.dispatch.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tier, name, email, company]
+              properties:
+                tier:
+                  type: string
+                  enum: [discovery, audit, reg, govops, edge, sandbox, undecided]
+                name: { type: string }
+                email: { type: string, format: email, description: Work email — free providers are rejected }
+                company: { type: string }
+                role: { type: string }
+                workflow: { type: string, description: The AI workflow to govern in the PoC }
+                frameworks: { type: string, description: Regulatory frameworks in scope }
+                website: { type: string, description: Honeypot — leave empty }
+      responses:
+        "200":
+          description: >-
+            Application recorded (or honeypot discarded with
+            `application_id: "discarded"`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  application_id: { type: string, format: uuid }
+                  sku_id: { type: string }
+        "400":
+          description: >-
+            Validation failure — `json_parse_failed`, `unknown_tier`
+            (body lists the valid tiers), `missing_required_field`,
+            `invalid_email`, `work_email_required`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500":
+          description: Unhandled handler exception (message echoed)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/v1/public/stats:
+    get:
+      operationId: site-get-api-v1-public-stats
+      summary: Public counters for the hero live ticker
+      description: |
+        Returns the small public counter set consumed by
+        `assets/live-ticker.js` (evidence packs verified, decisions
+        governed, frameworks mapped). Tier 1 reads bounded COUNT queries
+        from D1 when bound; otherwise it serves the repo-derived
+        snapshot (`source` pins which tier answered). Edge-cached 60 s
+        to match the client poll. Emits a fire-and-forget
+        `kye.compliance.attestation.v1` per response (§0.3).
+      tags: [PublicData]
+      x-kye-source-file: public/site/functions/api/v1/public/stats.js
+      x-kye-emits-envelopes: [kye.compliance.attestation.v1]
+      responses:
+        "200":
+          description: Current public counters
+          headers:
+            x-kye-schema-version:
+              schema: { type: string }
+              description: kye.public.stats.v1
+            cache-control:
+              schema: { type: string }
+              description: public, max-age=60, stale-while-revalidate=300
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema_version, evidence_packs_verified, decisions_governed, frameworks_mapped, generated_at, source]
+                properties:
+                  schema_version: { type: string, enum: [kye.public.stats.v1] }
+                  evidence_packs_verified: { type: integer }
+                  decisions_governed: { type: integer }
+                  frameworks_mapped: { type: integer }
+                  generated_at: { type: string, format: date-time }
+                  source: { type: string, description: "`d1` or the snapshot pin" }
+
+  /api/v1/quiz/respond:
+    post:
+      operationId: site-post-api-v1-quiz-respond
+      summary: Record a completed quiz response (public, best-effort)
+      description: |
+        Evidence sink for the public quiz widget (/quiz.html →
+        assets/quiz.js): the widget POSTs a `kye.quiz.response.v1`
+        envelope on completion so even the lead-capture funnel lands in
+        the WORM audit chain (§0.3). The client treats this as
+        fire-and-forget, so the handler is resilient — it persists when
+        D1 is bound, emits the audit event when the audit-chain base URL
+        is set, and always answers 200 for a well-formed body so a
+        transient backend wobble never breaks the share/score UX.
+      tags: [PublicData]
+      x-kye-source-file: public/site/functions/api/v1/quiz/respond.js
+      x-kye-emits-envelopes: [kye.quiz.response.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quiz_id, score, band]
+              properties:
+                quiz_id: { type: string }
+                score: { type: number }
+                band: { type: string, description: Scoring band the result fell into }
+                answers: { type: array, items: {}, description: "Raw answer list (persisted as JSON, capped at 8000 chars)" }
+                submitted_at: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Response accepted; persistence + evidence flags reported honestly
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  response_id: { type: string, format: uuid }
+                  persisted: { type: boolean }
+                  evidence_recorded: { type: boolean }
+        "400":
+          description: "`invalid_body` (unparseable JSON) or `missing_required_field` (quiz_id, score, band)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Unhandled handler exception (truncated message echoed)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /comms/unsubscribe:
+    get:
+      operationId: site-get-comms-unsubscribe
+      summary: Human one-click unsubscribe (renders a confirmation page)
+      description: |
+        Destination of the canonical `link.unsubscribe` footer link in
+        every §38 / §62 outbound email (PECR reg. 22, CAN-SPAM §5, GDPR
+        Art. 21 — one click, no login, honoured immediately). Verifies
+        the signed token in `?u=`, records the suppression through the
+        ONE canonical comms-engine suppress path (the recipient travels
+        as a one-way hash, never the raw email), then renders an HTML
+        confirmation page. A backend hiccup still confirms intent with
+        a 202 — the suppress call is idempotent on the next click.
+      tags: [Comms]
+      x-kye-source-file: public/site/functions/comms/unsubscribe.js
+      parameters:
+        - name: u
+          in: query
+          required: true
+          schema: { type: string }
+          description: Signed unsubscribe token minted into the email footer
+      responses:
+        "200":
+          description: Suppression recorded; confirmation page rendered
+          content:
+            text/html:
+              schema: { type: string }
+        "202":
+          description: Token verified but the suppress backend errored — intent acknowledged, will be actioned
+          content:
+            text/html:
+              schema: { type: string }
+        "400":
+          description: Token missing, altered or expired (error page rendered)
+          content:
+            text/html:
+              schema: { type: string }
+    post:
+      operationId: site-post-comms-unsubscribe
+      summary: RFC 8058 one-click unsubscribe (mail-client POST)
+      description: |
+        Mail clients POST `List-Unsubscribe=One-Click` here; the signed
+        token rides in `?u=` and/or the form/JSON body (`u` or `token`).
+        No HTML is returned — a 2xx text/plain is the RFC 8058 contract.
+        Suppression goes through the same canonical comms-engine path as
+        the GET flow.
+      tags: [Comms]
+      x-kye-source-file: public/site/functions/comms/unsubscribe.js
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                u: { type: string, description: Signed unsubscribe token }
+                token: { type: string, description: Accepted alias for `u` }
+                List-Unsubscribe: { type: string, description: "RFC 8058 literal `One-Click`" }
+          application/json:
+            schema:
+              type: object
+              properties:
+                u: { type: string }
+                token: { type: string }
+      responses:
+        "200":
+          description: Suppression recorded ("unsubscribed")
+          content:
+            text/plain:
+              schema: { type: string }
+        "202":
+          description: Token verified, suppress backend errored — accepted for action
+          content:
+            text/plain:
+              schema: { type: string }
+        "400":
+          description: Missing or invalid token
+          content:
+            text/plain:
+              schema: { type: string }
+
+  "/trust/self-audit/live/{[path}]":
+    get:
+      operationId: site-get-trust-self-audit-live-by-path
+      summary: Fetch a production-signed live self-audit bundle (public)
+      description: |
+        Public read side of §0.3 self-governance-on-production: serves
+        the Ed25519-signed live self-audit bundles the
+        kye-self-audit-daemon Worker publishes to the shared R2 bucket.
+        The catch-all segment addresses one partition —
+        `latest`, `latest/bundle.json`, `<YYYY-MM-DD>/` or
+        `<YYYY-MM-DD>/bundle.json`; an empty segment resolves to
+        `latest`. Any other shape is rejected (no arbitrary R2
+        traversal). Anyone can verify the signature against
+        /trust/self-audit-jwks.json with
+        `node scripts/verify-self-audit.mjs`. Edge-cached 5 minutes.
+      tags: [Trust]
+      x-kye-source-file: public/site/functions/trust/self-audit/live/[[path]].js
+      parameters:
+        - name: "[path"
+          in: path
+          required: true
+          schema: { type: string }
+          description: >-
+            Catch-all partition selector — `latest` or a `YYYY-MM-DD`
+            date, optionally followed by `/bundle.json`.
+      responses:
+        "200":
+          description: The signed bundle bytes, verbatim
+          headers:
+            x-kye-trust-surface:
+              schema: { type: string }
+              description: self-audit-live
+            x-kye-key-class:
+              schema: { type: string }
+              description: production
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Ed25519-signed self-audit bundle envelope
+        "404":
+          description: >-
+            Non-addressable path shape (`not_found`) or no bundle
+            published for the partition yet (`no_live_bundle`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: R2 binding not attached on this deployment (`r2_binding_unavailable`) — honest machine-readable fail, never a synthesised bundle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /webhooks/clerk:
+    get:
+      operationId: site-get-webhooks-clerk
+      summary: Webhook receiver self-description
+      description: >-
+        Returns the receiver hint plus the list of the 18 routed Clerk
+        event types, so a GET probe of the configured webhook URL is
+        self-documenting.
+      tags: [Webhooks]
+      x-kye-source-file: public/site/functions/webhooks/clerk.js
+      responses:
+        "200":
+          description: Receiver hint + routed event list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  message: { type: string }
+                  routed_events:
+                    type: array
+                    items: { type: string }
+    post:
+      operationId: site-post-webhooks-clerk
+      summary: Receive a Clerk webhook delivery (Svix-signed)
+      description: |
+        Verifies the Svix v1 signature (svix-id / svix-timestamp /
+        svix-signature headers) against the configured signing secret,
+        then projects each of the 18 routed Clerk event types
+        (user.*, session.*, organization.*, organizationMembership.*,
+        organizationInvitation.*, invitation.*) to a
+        `kye.evidence.<bucket>.<verb>.v1` envelope persisted to R2 and
+        fanned out on the webhook queue when those bindings are wired.
+        Recognised events are always ACKed 200 even if a downstream
+        projection fails (the audit chain is canonical; the D1
+        projection is rebuildable) — Clerk's retry budget is small and
+        a half-applied projection is worse than a missed one. With the
+        secret unset the endpoint answers 503 so Clerk retries with
+        backoff.
+      tags: [Webhooks]
+      x-kye-source-file: public/site/functions/webhooks/clerk.js
+      x-kye-emits-envelopes: [kye.evidence.identity.created.v1, kye.evidence.session.created.v1, kye.evidence.organization.created.v1]
+      parameters:
+        - name: svix-id
+          in: header
+          required: true
+          schema: { type: string }
+        - name: svix-timestamp
+          in: header
+          required: true
+          schema: { type: string }
+        - name: svix-signature
+          in: header
+          required: true
+          schema: { type: string }
+          description: Space-separated `v1,<base64>` signature tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Clerk webhook payload (`type` + `data`), verified raw before parsing
+              properties:
+                type: { type: string }
+                data: { type: object }
+      responses:
+        "200":
+          description: Delivery verified and acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  type: { type: string, description: The Clerk event type }
+                  event_id: { type: string, description: The svix-id of the delivery }
+        "400":
+          description: "`missing_svix_headers` or `invalid_json`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: "`invalid_signature` or `signature_verification_failed`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: "`webhook_secret_unconfigured` — signing secret unset; Clerk will retry"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }

@@ -1,0 +1,884 @@
+openapi: 3.1.0
+info:
+  title: KYE Protocol™ Core API — v3 Entity Hierarchy + Relationships
+  version: 3.0.0
+  description: |
+    CRUD endpoints for the v3 KYE entity hierarchy (Tenant → Workspace → Principal,
+    Team, Project, Resource, Policy, Legal Entity, Billing Account, Domain, Model,
+    Tool, External App, Audit Stream) and the five typed relationship tables
+    (member-of, acts-in, applies-to, granted-access-to, uses).
+
+    Base path: /api/v1/
+
+servers:
+  - url: https://kye.example
+    description: Reference KYE deployment
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: tenants
+  - name: workspaces
+  - name: principals
+  - name: teams
+  - name: projects
+  - name: resources
+  - name: policies
+  - name: legal-entities
+  - name: billing-accounts
+  - name: domains
+  - name: models
+  - name: tools
+  - name: external-apps
+  - name: audit-streams
+  - name: relationships
+
+paths:
+  /api/v1/tenants:
+    get:
+      tags: [tenants]
+      operationId: core.listTenants
+      summary: List tenants
+      parameters:
+        - name: env
+          in: query
+          schema: { type: string, enum: [prod, sandbox, test] }
+        - name: state
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of tenants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Tenant' }
+    post:
+      tags: [tenants]
+      operationId: core.createTenant
+      summary: Create a tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TenantCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Tenant' }
+
+  /api/v1/tenants/{tenant_id}:
+    parameters:
+      - name: tenant_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [tenants]
+      operationId: core.getTenant
+      summary: Get a tenant
+      responses:
+        '200':
+          description: Tenant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Tenant' }
+        '404': { description: Not found }
+    put:
+      tags: [tenants]
+      operationId: core.updateTenant
+      summary: Update tenant metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TenantUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Tenant' }
+    delete:
+      tags: [tenants]
+      operationId: core.deleteTenant
+      summary: Delete (soft-delete) a tenant
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/workspaces:
+    get:
+      tags: [workspaces]
+      operationId: core.listWorkspaces
+      summary: List workspaces
+      parameters:
+        - name: tenant_id
+          in: query
+          schema: { type: string }
+        - name: env
+          in: query
+          schema: { type: string }
+        - name: state
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of workspaces
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Workspace' }
+    post:
+      tags: [workspaces]
+      operationId: core.createWorkspace
+      summary: Create a workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Workspace' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Workspace' }
+
+  /api/v1/workspaces/{workspace_id}:
+    parameters:
+      - name: workspace_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [workspaces]
+      operationId: core.getWorkspace
+      summary: Get a workspace
+      responses:
+        '200':
+          description: Workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Workspace' }
+        '404': { description: Not found }
+    put:
+      tags: [workspaces]
+      operationId: core.updateWorkspace
+      summary: Update workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Workspace' }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [workspaces]
+      operationId: core.deleteWorkspace
+      summary: Delete workspace
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/principals:
+    get:
+      tags: [principals]
+      operationId: core.listPrincipals
+      summary: List principals
+      parameters:
+        - name: tenant_id
+          in: query
+          schema: { type: string }
+        - name: principal_class
+          in: query
+          schema: { type: string, enum: [human, system, agent, external_app] }
+        - name: state
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of principals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Principal' }
+    post:
+      tags: [principals]
+      operationId: core.createPrincipal
+      summary: Create a principal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Principal' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Principal' }
+
+  /api/v1/principals/invite:
+    post:
+      tags: [principals]
+      operationId: invitePrincipal
+      summary: Invite a human principal by email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenant_id, principal_class, display_name, invite]
+              properties:
+                tenant_id: { type: string }
+                principal_class: { type: string, enum: [human] }
+                display_name: { type: string }
+                state: { type: string }
+                human: { type: object }
+                invite:
+                  type: object
+                  required: [email]
+                  properties:
+                    email: { type: string, format: email }
+      responses:
+        '201': { description: Invited }
+
+  /api/v1/principals/{principal_id}:
+    parameters:
+      - name: principal_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [principals]
+      operationId: core.getPrincipal
+      summary: Get a principal
+      responses:
+        '200':
+          description: Principal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Principal' }
+        '404': { description: Not found }
+    put:
+      tags: [principals]
+      operationId: core.updatePrincipal
+      summary: Update a principal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Principal' }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [principals]
+      operationId: core.deletePrincipal
+      summary: Delete a principal
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/teams:
+    get:
+      tags: [teams]
+      operationId: core.listTeams
+      summary: List teams
+      parameters:
+        - name: tenant_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Teams
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Team' } } } }
+    post:
+      tags: [teams]
+      operationId: core.createTeam
+      summary: Create a team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Team' }
+      responses:
+        '201': { description: Created }
+
+  /api/v1/teams/{team_id}:
+    parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [teams]
+      operationId: core.getTeam
+      summary: Get a team
+      responses:
+        '200': { description: Team }
+    put:
+      tags: [teams]
+      operationId: core.updateTeam
+      summary: Update a team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Team' }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [teams]
+      operationId: core.deleteTeam
+      summary: Delete a team
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/projects:
+    get:
+      tags: [projects]
+      operationId: core.listProjects
+      summary: List projects
+      parameters:
+        - name: workspace_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Projects }
+    post:
+      tags: [projects]
+      operationId: core.createProject
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Project' }
+      responses:
+        '201': { description: Created }
+
+  /api/v1/projects/{project_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [projects]
+      operationId: core.getProject
+      summary: Get a project
+      responses:
+        '200': { description: Project }
+    put:
+      tags: [projects]
+      operationId: core.updateProject
+      summary: Update a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Project' }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [projects]
+      operationId: deleteProject
+      summary: Delete a project
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/resources:
+    get:
+      tags: [resources]
+      operationId: core.listResources
+      summary: List resources
+      parameters:
+        - name: workspace_id
+          in: query
+          schema: { type: string }
+        - name: tenant_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Resources }
+    post:
+      tags: [resources]
+      operationId: core.createResource
+      summary: Create a resource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Resource' }
+      responses:
+        '201': { description: Created }
+
+  /api/v1/resources/{resource_id}:
+    parameters:
+      - name: resource_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [resources]
+      operationId: core.getResource
+      summary: Get a resource
+      responses:
+        '200': { description: Resource }
+    put:
+      tags: [resources]
+      operationId: core.updateResource
+      summary: Update a resource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Resource' }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [resources]
+      operationId: core.deleteResource
+      summary: Delete a resource
+      responses:
+        '204': { description: Deleted }
+
+  # ---- Relationships ----
+
+  /api/v1/relationships/member-of:
+    get:
+      tags: [relationships]
+      operationId: core.listMemberOf
+      summary: List principal-team membership rows
+      parameters:
+        - name: principal_id
+          in: query
+          schema: { type: string }
+        - name: team_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Member-of rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/MemberOf' }
+    post:
+      tags: [relationships]
+      operationId: core.createMemberOf
+      summary: Add principal to team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemberOf' }
+      responses:
+        '201': { description: Created }
+
+  /api/v1/relationships/member-of/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [relationships]
+      operationId: deleteMemberOf
+      summary: Remove principal from team
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/relationships/acts-in:
+    get:
+      tags: [relationships]
+      operationId: core.listActsIn
+      summary: List principal-workspace binding rows
+      parameters:
+        - name: principal_id
+          in: query
+          schema: { type: string }
+        - name: workspace_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Acts-in rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ActsIn' }
+    post:
+      tags: [relationships]
+      operationId: core.createActsIn
+      summary: Grant principal workspace access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActsIn' }
+      responses:
+        '201': { description: Created }
+
+  /api/v1/relationships/acts-in/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [relationships]
+      operationId: deleteActsIn
+      summary: Revoke principal workspace access
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/relationships/applies-to:
+    get:
+      tags: [relationships]
+      operationId: core.listAppliesTo
+      summary: List policy-target binding rows
+      parameters:
+        - name: policy_id
+          in: query
+          schema: { type: string }
+        - name: target_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Applies-to rows
+    post:
+      tags: [relationships]
+      operationId: core.createAppliesTo
+      summary: Bind a policy to a target
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AppliesTo' }
+      responses:
+        '201': { description: Created }
+
+  /api/v1/relationships/applies-to/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [relationships]
+      operationId: deleteAppliesTo
+      summary: Remove policy binding
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/relationships/granted-access-to:
+    get:
+      tags: [relationships]
+      operationId: core.listGrantedAccessTo
+      summary: List resource access grant rows
+      parameters:
+        - name: grantee_id
+          in: query
+          schema: { type: string }
+        - name: resource_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Granted-access-to rows }
+    post:
+      tags: [relationships]
+      operationId: core.createGrantedAccessTo
+      summary: Grant resource access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrantedAccessTo' }
+      responses:
+        '201': { description: Created }
+
+  /api/v1/relationships/granted-access-to/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [relationships]
+      operationId: deleteGrantedAccessTo
+      summary: Revoke resource access
+      responses:
+        '204': { description: Deleted }
+
+  /api/v1/relationships/uses:
+    get:
+      tags: [relationships]
+      operationId: core.listUses
+      summary: List agent-tool/model usage rows
+      parameters:
+        - name: agent_id
+          in: query
+          schema: { type: string }
+        - name: used_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: Uses rows }
+    post:
+      tags: [relationships]
+      operationId: core.createUses
+      summary: Bind an agent to a tool or model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Uses' }
+      responses:
+        '201': { description: Created }
+
+  /api/v1/relationships/uses/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [relationships]
+      operationId: deleteUses
+      summary: Remove agent-tool binding
+      responses:
+        '204': { description: Deleted }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Tenant:
+      type: object
+      required: [id, slug, name, env, state, created_by, created_at]
+      properties:
+        schema_version: { type: string, enum: [kye.entity.tenant.v1] }
+        id: { type: string, description: 'kye:tenant:<slug>' }
+        slug: { type: string, pattern: '^[a-z0-9-]+$' }
+        name: { type: string }
+        env: { type: string, enum: [prod, sandbox, test] }
+        clerk_org_id: { type: ["string", "null"] }
+        owner_email: { type: ["string", "null"], format: email }
+        contract_status: { type: string, enum: [lead, pilot, pilot-granted, active, suspended, terminated] }
+        sla_tier: { type: string, enum: [pilot, standard, enterprise, tier-1-bank] }
+        region: { type: string }
+        state: { type: string, enum: [provisioning, active, suspended, deleted] }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        activated_at: { type: ["string", "null"], format: date-time }
+        deleted_at: { type: ["string", "null"], format: date-time }
+        notes: { type: ["string", "null"] }
+
+    TenantCreate:
+      type: object
+      required: [slug, name, env]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        env: { type: string, enum: [prod, sandbox, test] }
+        region: { type: string }
+        owner_email: { type: string, format: email }
+        sla_tier: { type: string }
+
+    TenantUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        state: { type: string }
+        notes: { type: string }
+
+    Workspace:
+      type: object
+      required: [id, tenant_id, slug, name, env, region, state, created_by, created_at]
+      properties:
+        schema_version: { type: string }
+        id: { type: string }
+        tenant_id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        env: { type: string, enum: [prod, sandbox, test, dev] }
+        region: { type: string }
+        kind: { type: string }
+        data_residency: { type: ["string", "null"] }
+        policy_id: { type: ["string", "null"] }
+        state: { type: string, enum: [provisioning, active, archived, deleted] }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        deleted_at: { type: ["string", "null"], format: date-time }
+
+    Principal:
+      type: object
+      required: [id, tenant_id, principal_class, display_name, state, created_at]
+      properties:
+        schema_version: { type: string }
+        id: { type: string }
+        tenant_id: { type: string }
+        workspace_id: { type: ["string", "null"] }
+        principal_class: { type: string, enum: [human, system, agent, external_app] }
+        subclass: { type: string }
+        display_name: { type: string }
+        state: { type: string, enum: [pending, active, suspended, revoked, deleted] }
+        human: { type: ["object", "null"] }
+        system: { type: ["object", "null"] }
+        agent: { type: ["object", "null"] }
+        external_app: { type: ["object", "null"] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: ["string", "null"], format: date-time }
+        deleted_at: { type: ["string", "null"], format: date-time }
+
+    Team:
+      type: object
+      required: [id, tenant_id, slug, name, created_at]
+      properties:
+        schema_version: { type: string }
+        id: { type: string }
+        tenant_id: { type: string }
+        workspace_id: { type: ["string", "null"] }
+        slug: { type: string }
+        name: { type: string }
+        state: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Project:
+      type: object
+      required: [id, tenant_id, workspace_id, slug, name, created_at]
+      properties:
+        schema_version: { type: string }
+        id: { type: string }
+        tenant_id: { type: string }
+        workspace_id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        state: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Resource:
+      type: object
+      required: [id, tenant_id, name, created_at]
+      properties:
+        schema_version: { type: string }
+        id: { type: string }
+        tenant_id: { type: string }
+        workspace_id: { type: ["string", "null"] }
+        name: { type: string }
+        resource_type: { type: string }
+        state: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+
+    MemberOf:
+      type: object
+      required: [principal_id, team_id, role, joined_at]
+      properties:
+        schema_version: { type: string }
+        principal_id: { type: string }
+        team_id: { type: string }
+        role: { type: string, enum: [owner, admin, member, approver, viewer, auditor] }
+        joined_at: { type: string, format: date-time }
+        left_at: { type: ["string", "null"], format: date-time }
+
+    ActsIn:
+      type: object
+      required: [principal_id, workspace_id, since]
+      properties:
+        schema_version: { type: string }
+        principal_id: { type: string }
+        workspace_id: { type: string }
+        since: { type: string, format: date-time }
+        until: { type: ["string", "null"], format: date-time }
+        allowed_actions: { type: array, items: { type: string } }
+
+    AppliesTo:
+      type: object
+      required: [policy_id, target_class, target_id]
+      properties:
+        schema_version: { type: string }
+        policy_id: { type: string }
+        target_class: { type: string }
+        target_id: { type: string }
+        effective_from: { type: string, format: date-time }
+        effective_until: { type: ["string", "null"], format: date-time }
+
+    GrantedAccessTo:
+      type: object
+      required: [grantee_id, grantee_kind, resource_id, access_level, granted_by, granted_at]
+      properties:
+        schema_version: { type: string }
+        grantee_id: { type: string }
+        grantee_kind: { type: string }
+        resource_id: { type: string }
+        access_level: { type: string, enum: [read, write, admin, execute, owner] }
+        granted_by: { type: string }
+        granted_at: { type: string, format: date-time }
+        expires_at: { type: ["string", "null"], format: date-time }
+        revoked_at: { type: ["string", "null"], format: date-time }
+
+    Uses:
+      type: object
+      required: [agent_id, used_id, usage_kind, allowed]
+      properties:
+        schema_version: { type: string }
+        agent_id: { type: string }
+        used_id: { type: string }
+        usage_kind: { type: string }
+        allowed: { type: boolean }
+        since: { type: string, format: date-time }
+        until: { type: ["string", "null"], format: date-time }

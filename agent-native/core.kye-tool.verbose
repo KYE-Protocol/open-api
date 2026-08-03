@@ -1,0 +1,105 @@
+@kye-tool v1
+@spec core.openapi.v1
+@source-sha256 fb776e27e6bbcf0f7ed36ed10b1618971daa0e32edb347b9ffd5badbdb462645
+@compiled-at 2026-05-16T15:19:04Z
+@kid kye:key:agent-tool-signing:dev
+@sig DEV-NOT-FOR-PRODUCTION
+@base https://kye.example
+@auth bearer token
+@endpoints 46
+
+GET /api/v1/principals core.listPrincipals @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,principal_class:string?,state:string? -> object
+POST /api/v1/principals core.createPrincipal @auth=inherit @purpose=Operate.Read | body:Body -> object
+POST /api/v1/principals/invite invitePrincipal @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+GET /api/v1/principals/{principal_id} core.getPrincipal @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PUT /api/v1/principals/{principal_id} core.updatePrincipal @auth=inherit @purpose=Operate.Read @idempotent | body:Body -> opaque
+DELETE /api/v1/principals/{principal_id} core.deletePrincipal @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> void
+GET /api/v1/projects core.listProjects @auth=inherit @purpose=Operate.Read @idempotent | workspace_id:string? -> opaque
+POST /api/v1/projects core.createProject @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+GET /api/v1/projects/{project_id} core.getProject @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+PUT /api/v1/projects/{project_id} core.updateProject @auth=inherit @purpose=Operate.Read @idempotent | body:Body -> opaque
+DELETE /api/v1/projects/{project_id} deleteProject @auth=inherit @purpose=Operate.Delete @idempotent | ∅ -> void
+GET /api/v1/relationships/acts-in core.listActsIn @auth=inherit @purpose=Operate.Read @idempotent | principal_id:string?,workspace_id:string? -> object
+POST /api/v1/relationships/acts-in core.createActsIn @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+DELETE /api/v1/relationships/acts-in/{id} deleteActsIn @auth=inherit @purpose=Operate.Delete @idempotent | ∅ -> void
+GET /api/v1/relationships/applies-to core.listAppliesTo @auth=inherit @purpose=Operate.Read @idempotent | policy_id:string?,target_id:string? -> opaque
+POST /api/v1/relationships/applies-to core.createAppliesTo @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+DELETE /api/v1/relationships/applies-to/{id} deleteAppliesTo @auth=inherit @purpose=Operate.Delete @idempotent | ∅ -> void
+GET /api/v1/relationships/granted-access-to core.listGrantedAccessTo @auth=inherit @purpose=Operate.Read @idempotent | grantee_id:string?,resource_id:string? -> opaque
+POST /api/v1/relationships/granted-access-to core.createGrantedAccessTo @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+DELETE /api/v1/relationships/granted-access-to/{id} deleteGrantedAccessTo @auth=inherit @purpose=Operate.Delete @idempotent | ∅ -> void
+GET /api/v1/relationships/member-of core.listMemberOf @auth=inherit @purpose=Operate.Read @idempotent | principal_id:string?,team_id:string? -> object
+POST /api/v1/relationships/member-of core.createMemberOf @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+DELETE /api/v1/relationships/member-of/{id} deleteMemberOf @auth=inherit @purpose=Operate.Delete @idempotent | ∅ -> void
+GET /api/v1/relationships/uses core.listUses @auth=inherit @purpose=Operate.Read @idempotent | agent_id:string?,used_id:string? -> opaque
+POST /api/v1/relationships/uses core.createUses @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+DELETE /api/v1/relationships/uses/{id} deleteUses @auth=inherit @purpose=Operate.Delete @idempotent | ∅ -> void
+GET /api/v1/resources core.listResources @auth=inherit @purpose=Operate.Read @idempotent | workspace_id:string?,tenant_id:string? -> opaque
+POST /api/v1/resources core.createResource @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+GET /api/v1/resources/{resource_id} core.getResource @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+PUT /api/v1/resources/{resource_id} core.updateResource @auth=inherit @purpose=Operate.Read @idempotent | body:Body -> opaque
+DELETE /api/v1/resources/{resource_id} core.deleteResource @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> void
+GET /api/v1/teams core.listTeams @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string? -> object
+POST /api/v1/teams core.createTeam @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+GET /api/v1/teams/{team_id} core.getTeam @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> opaque
+PUT /api/v1/teams/{team_id} core.updateTeam @auth=inherit @purpose=Operate.Read @idempotent | body:Body -> opaque
+DELETE /api/v1/teams/{team_id} core.deleteTeam @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> void
+GET /api/v1/tenants core.listTenants @auth=inherit @purpose=Operate.Read @idempotent | env:string?,state:string? -> object
+POST /api/v1/tenants core.createTenant @auth=inherit @purpose=Operate.Read | body:Body -> object
+GET /api/v1/tenants/{tenant_id} core.getTenant @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PUT /api/v1/tenants/{tenant_id} core.updateTenant @auth=inherit @purpose=Operate.Read @idempotent | body:Body -> object
+DELETE /api/v1/tenants/{tenant_id} core.deleteTenant @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> void
+GET /api/v1/workspaces core.listWorkspaces @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,env:string?,state:string? -> object
+POST /api/v1/workspaces core.createWorkspace @auth=inherit @purpose=Operate.Read | body:Body -> object
+GET /api/v1/workspaces/{workspace_id} core.getWorkspace @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PUT /api/v1/workspaces/{workspace_id} core.updateWorkspace @auth=inherit @purpose=Operate.Read @idempotent | body:Body -> opaque
+DELETE /api/v1/workspaces/{workspace_id} core.deleteWorkspace @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> void
+
+@hint core.listPrincipals List principals
+@hint core.createPrincipal Create a principal
+@hint invitePrincipal Invite a human principal by email
+@hint core.getPrincipal Get a principal
+@hint core.updatePrincipal Update a principal
+@hint core.deletePrincipal Delete a principal
+@hint core.listProjects List projects
+@hint core.createProject Create a project
+@hint core.getProject Get a project
+@hint core.updateProject Update a project
+@hint deleteProject Delete a project
+@hint core.listActsIn List principal-workspace binding rows
+@hint core.createActsIn Grant principal workspace access
+@hint deleteActsIn Revoke principal workspace access
+@hint core.listAppliesTo List policy-target binding rows
+@hint core.createAppliesTo Bind a policy to a target
+@hint deleteAppliesTo Remove policy binding
+@hint core.listGrantedAccessTo List resource access grant rows
+@hint core.createGrantedAccessTo Grant resource access
+@hint deleteGrantedAccessTo Revoke resource access
+@hint core.listMemberOf List principal-team membership rows
+@hint core.createMemberOf Add principal to team
+@hint deleteMemberOf Remove principal from team
+@hint core.listUses List agent-tool/model usage rows
+@hint core.createUses Bind an agent to a tool or model
+@hint deleteUses Remove agent-tool binding
+@hint core.listResources List resources
+@hint core.createResource Create a resource
+@hint core.getResource Get a resource
+@hint core.updateResource Update a resource
+@hint core.deleteResource Delete a resource
+@hint core.listTeams List teams
+@hint core.createTeam Create a team
+@hint core.getTeam Get a team
+@hint core.updateTeam Update a team
+@hint core.deleteTeam Delete a team
+@hint core.listTenants List tenants
+@hint core.createTenant Create a tenant
+@hint core.getTenant Get a tenant
+@hint core.updateTenant Update tenant metadata
+@hint core.deleteTenant Delete (soft-delete) a tenant
+@hint core.listWorkspaces List workspaces
+@hint core.createWorkspace Create a workspace
+@hint core.getWorkspace Get a workspace
+@hint core.updateWorkspace Update workspace
+@hint core.deleteWorkspace Delete workspace
+
+@end

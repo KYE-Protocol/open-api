@@ -1,0 +1,615 @@
+openapi: 3.1.0
+info:
+  title: KYE Protocol™ — Reality Coupling™ API
+  version: 1.0.0
+  description: |
+    Admin authoring (owner-gated) and tenant-scoped read endpoints for the
+    KYE Reality Coupling™ surface — reality anchors, snapshots, runtime
+    coupling checks, and stable-drift events.
+
+    All POST endpoints accept an `Idempotency-Key` header; if present, the
+    response is cached per (tenant_id, scope, key) and returned verbatim
+    on retry. Soft-delete only — `deleted_at` is set; the row is never
+    physically removed.
+
+    V1.1 endpoints (assumptions, revalidation requests, coupling evidence
+    packs, cross-system consistency checks) are intentionally deferred
+    and NOT documented here.
+
+    Base path: /api/v1/
+
+servers:
+  - url: https://kye-admin.example
+    description: KYE Admin Console (owner-gated; cross-tenant authoring)
+  - url: https://kye-app.example
+    description: KYE Cloud (tenant-scoped read-only)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: reality-coupling
+    description: KYE Reality Coupling™ — anchors, snapshots, checks, stable-drift events.
+
+paths:
+
+  # =========================================================================
+  # Reality Anchors
+  # =========================================================================
+  /api/v1/reality-anchors:
+    get:
+      tags: [reality-coupling]
+      operationId: listRealityAnchors
+      summary: List reality anchors
+      parameters:
+        - { name: tenant_id,   in: query, schema: { type: string } }
+        - { name: anchor_type, in: query, schema: { type: string } }
+        - { name: status,      in: query, schema: { type: string, enum: [draft, active, deprecated] } }
+        - { name: q,           in: query, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealityAnchorList' } } } }
+    post:
+      tags: [reality-coupling]
+      operationId: createRealityAnchor
+      summary: Create a reality anchor (admin)
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RealityAnchorCreate' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/RealityAnchorEnvelope' } } } }
+        '400': { description: Validation error }
+
+  /api/v1/reality-anchors/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [reality-coupling]
+      operationId: getRealityAnchor
+      summary: Fetch a reality anchor
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealityAnchorEnvelope' } } } }
+        '404': { description: Not found }
+    patch:
+      tags: [reality-coupling]
+      operationId: updateRealityAnchor
+      summary: Update a reality anchor (admin)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RealityAnchorPatch' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealityAnchorEnvelope' } } } } }
+    delete:
+      tags: [reality-coupling]
+      operationId: softDeleteRealityAnchor
+      summary: Soft-delete a reality anchor (admin)
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+
+  /api/v1/reality-anchors/{id}/verify:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [reality-coupling]
+      operationId: verifyRealityAnchor
+      summary: Mark an anchor as verified (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealityAnchorEnvelope' } } } } }
+
+  /api/v1/reality-anchors/{id}/deprecate:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [reality-coupling]
+      operationId: deprecateRealityAnchor
+      summary: Mark an anchor as deprecated (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 2048 }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealityAnchorEnvelope' } } } } }
+
+  # =========================================================================
+  # Reality Snapshots
+  # =========================================================================
+  /api/v1/reality-snapshots:
+    get:
+      tags: [reality-coupling]
+      operationId: listRealitySnapshots
+      summary: List reality snapshots
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { name: anchor_id, in: query, schema: { type: string } }
+        - { name: is_stale,  in: query, schema: { type: string, enum: ['true', 'false'] } }
+        - { name: since,     in: query, schema: { type: string, format: date-time } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealitySnapshotList' } } } } }
+    post:
+      tags: [reality-coupling]
+      operationId: createRealitySnapshot
+      summary: Record a reality snapshot (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RealitySnapshotCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/RealitySnapshotEnvelope' } } } } }
+
+  /api/v1/reality-snapshots/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [reality-coupling]
+      operationId: getRealitySnapshot
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealitySnapshotEnvelope' } } } }
+        '404': { description: Not found }
+    delete:
+      tags: [reality-coupling]
+      operationId: softDeleteRealitySnapshot
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+
+  /api/v1/reality-snapshots/{id}/verify:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [reality-coupling]
+      operationId: verifyRealitySnapshot
+      summary: Mark a snapshot as verified (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealitySnapshotEnvelope' } } } } }
+
+  # =========================================================================
+  # Reality Coupling Checks
+  # =========================================================================
+  /api/v1/reality-coupling-checks:
+    get:
+      tags: [reality-coupling]
+      operationId: listRealityCouplingChecks
+      summary: List coupling checks
+      parameters:
+        - { name: tenant_id,        in: query, schema: { type: string } }
+        - { name: action_id,        in: query, schema: { type: string } }
+        - { name: coupling_result,  in: query, schema: { type: string, enum: [coupled, coupled_with_warnings, decoupling_detected, revalidation_required, quarantine_required, deny_required, unknown] } }
+        - { name: since,            in: query, schema: { type: string, format: date-time } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealityCouplingCheckList' } } } } }
+    post:
+      tags: [reality-coupling]
+      operationId: createRealityCouplingCheck
+      summary: Record a coupling check (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RealityCouplingCheckCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/RealityCouplingCheckEnvelope' } } } } }
+
+  /api/v1/reality-coupling-checks/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [reality-coupling]
+      operationId: getRealityCouplingCheck
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealityCouplingCheckEnvelope' } } } }
+        '404': { description: Not found }
+    delete:
+      tags: [reality-coupling]
+      operationId: softDeleteRealityCouplingCheck
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+
+  /api/v1/reality-coupling-checks/{id}/check:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [reality-coupling]
+      operationId: rerunRealityCouplingCheck
+      summary: Run/re-run a coupling check via the engine (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      responses: { '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/RealityCouplingCheckEnvelope' } } } } }
+
+  /api/v1/reality-coupling-checks/{id}/decide:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [reality-coupling]
+      operationId: decideRealityCouplingCheck
+      summary: Record an owner decision on a coupling check (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RealityCouplingCheckDecide' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RealityCouplingCheckEnvelope' } } } } }
+
+  # =========================================================================
+  # Stable Drift Events
+  # =========================================================================
+  /api/v1/stable-drift-events:
+    get:
+      tags: [reality-coupling]
+      operationId: listStableDriftEvents
+      summary: List stable-drift events
+      parameters:
+        - { name: tenant_id,  in: query, schema: { type: string } }
+        - { name: status,     in: query, schema: { type: string, enum: [open, acknowledged, resolved, quarantined] } }
+        - { name: severity,   in: query, schema: { type: string, enum: [low, medium, high, critical] } }
+        - { name: drift_type, in: query, schema: { type: string } }
+        - { name: since,      in: query, schema: { type: string, format: date-time } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StableDriftEventList' } } } } }
+    post:
+      tags: [reality-coupling]
+      operationId: createStableDriftEvent
+      summary: Open a stable-drift event (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StableDriftEventCreate' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/StableDriftEventEnvelope' } } } } }
+
+  /api/v1/stable-drift-events/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [reality-coupling]
+      operationId: getStableDriftEvent
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StableDriftEventEnvelope' } } } }
+        '404': { description: Not found }
+    delete:
+      tags: [reality-coupling]
+      operationId: softDeleteStableDriftEvent
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/SoftDeleteResponse' } } } } }
+
+  /api/v1/stable-drift-events/{id}/acknowledge:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [reality-coupling]
+      operationId: acknowledgeStableDriftEvent
+      summary: Acknowledge a drift event (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string, maxLength: 2048 }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StableDriftEventEnvelope' } } } } }
+
+  /api/v1/stable-drift-events/{id}/resolve:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [reality-coupling]
+      operationId: resolveStableDriftEvent
+      summary: Resolve a drift event (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StableDriftEventResolve' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StableDriftEventEnvelope' } } } } }
+
+  /api/v1/stable-drift-events/{id}/quarantine:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      tags: [reality-coupling]
+      operationId: quarantineStableDriftEvent
+      summary: Quarantine a drift event (admin)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 2048 }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/StableDriftEventEnvelope' } } } } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    KyeId:
+      type: string
+      pattern: '^kye:[a-z-]+:[A-Za-z0-9._:-]+$'
+
+    SoftDeleteResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        id: { type: string }
+        deleted_at: { type: string, format: date-time }
+
+    AnchorType:
+      type: string
+      enum:
+        - system_of_record
+        - external_source_of_truth
+        - policy_context
+        - risk_context
+        - market_context
+        - environment_state
+        - clinical_context
+        - financial_context
+        - infrastructure_context
+        - vendor_context
+        - identity_context
+
+    RuntimeEffect:
+      type: string
+      enum: [continue, continue_with_warning, require_revalidation, require_human_review, quarantine, deny]
+
+    CouplingResult:
+      type: string
+      enum: [coupled, coupled_with_warnings, decoupling_detected, revalidation_required, quarantine_required, deny_required, unknown]
+
+    Severity:
+      type: string
+      enum: [low, medium, high, critical]
+
+    DriftType:
+      type: string
+      enum:
+        - stable_drift
+        - verified_but_stale
+        - source_of_truth_stale
+        - operational_context_stale
+        - policy_context_shifted
+        - environment_state_mismatch
+        - system_of_record_conflict
+        - assumption_expired
+        - semantic_anchor_drift
+        - cross_system_consensus_drift
+        - local_validity_global_invalidity
+        - evidence_valid_reality_invalid
+
+    # -----------------------------------------------------------------------
+    # Reality Anchor
+    # -----------------------------------------------------------------------
+    RealityAnchor:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        version: { type: integer }
+        anchor_type: { $ref: '#/components/schemas/AnchorType' }
+        display_name: { type: string }
+        description: { type: string }
+        owner_entity_id: { type: string }
+        regulator_id: { type: string }
+        jurisdiction: { type: string }
+        status: { type: string, enum: [draft, active, deprecated] }
+        verified_at: { type: string, format: date-time }
+        deprecated_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        updated_at: { type: string, format: date-time }
+
+    RealityAnchorCreate:
+      type: object
+      required: [tenant_id, anchor_type, display_name, authority]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        anchor_type: { $ref: '#/components/schemas/AnchorType' }
+        display_name: { type: string, minLength: 1, maxLength: 256 }
+        description: { type: string, maxLength: 4096 }
+        authority:
+          type: object
+          required: [owner_entity_id]
+          properties:
+            owner_entity_id: { type: string }
+            regulator_id: { type: string }
+            jurisdiction: { type: string }
+        freshness_contract:
+          type: object
+          properties:
+            max_staleness_seconds: { type: integer, minimum: 0 }
+            expected_refresh_seconds: { type: integer, minimum: 0 }
+            stale_runtime_effect: { $ref: '#/components/schemas/RuntimeEffect' }
+        grounds_actions: { type: array, items: { type: string } }
+        grounds_profiles: { type: array, items: { type: string } }
+        source: { type: object }
+        tags: { type: array, items: { type: string } }
+
+    RealityAnchorPatch:
+      type: object
+      properties:
+        display_name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [draft, active, deprecated] }
+        freshness_contract: { type: object }
+        grounds_actions: { type: array, items: { type: string } }
+        grounds_profiles: { type: array, items: { type: string } }
+        source: { type: object }
+        tags: { type: array, items: { type: string } }
+
+    RealityAnchorEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        reality-anchor: { $ref: '#/components/schemas/RealityAnchor' }
+
+    RealityAnchorList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        reality-anchors:
+          type: array
+          items: { $ref: '#/components/schemas/RealityAnchor' }
+
+    # -----------------------------------------------------------------------
+    # Reality Snapshot
+    # -----------------------------------------------------------------------
+    RealitySnapshot:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        anchor_id: { $ref: '#/components/schemas/KyeId' }
+        anchor_type: { $ref: '#/components/schemas/AnchorType' }
+        sampled_at: { type: string, format: date-time }
+        valid_until: { type: string, format: date-time }
+        source_version: { type: string }
+        content_hash: { type: string }
+        freshness_age_seconds: { type: integer }
+        freshness_is_stale: { type: integer, enum: [0, 1] }
+        freshness_max_seconds: { type: integer }
+        verified_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+
+    RealitySnapshotCreate:
+      type: object
+      required: [tenant_id, anchor_id, sampled_at, content_hash]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        anchor_id: { $ref: '#/components/schemas/KyeId' }
+        anchor_type: { $ref: '#/components/schemas/AnchorType' }
+        sampled_at: { type: string, format: date-time }
+        valid_until: { type: string, format: date-time }
+        source_version: { type: string }
+        content_hash: { type: string, minLength: 1, maxLength: 256 }
+        content_summary: { type: object }
+        content_ref: { type: string }
+        freshness:
+          type: object
+          properties:
+            age_seconds: { type: integer, minimum: 0 }
+            is_stale: { type: boolean }
+            max_staleness_seconds: { type: integer, minimum: 0 }
+        observations: { type: array, items: { type: object } }
+        tags: { type: array, items: { type: string } }
+        signature: { type: object }
+
+    RealitySnapshotEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        reality-snapshot: { $ref: '#/components/schemas/RealitySnapshot' }
+
+    RealitySnapshotList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        reality-snapshots:
+          type: array
+          items: { $ref: '#/components/schemas/RealitySnapshot' }
+
+    # -----------------------------------------------------------------------
+    # Reality Coupling Check
+    # -----------------------------------------------------------------------
+    RealityCouplingCheck:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        action_id: { type: string }
+        actor_entity_id: { type: string }
+        principal_entity_id: { type: string }
+        purpose_grant_id: { type: string }
+        evaluated_at: { type: string, format: date-time }
+        pipeline_node: { type: string }
+        coupling_result: { $ref: '#/components/schemas/CouplingResult' }
+        runtime_effect: { $ref: '#/components/schemas/RuntimeEffect' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        drift_event_id: { type: string }
+        decided_at: { type: string, format: date-time }
+        decided_by: { type: string }
+        decision: { type: string, enum: [override, accept, escalate] }
+        decision_rationale: { type: string }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+
+    RealityCouplingCheckCreate:
+      type: object
+      required: [tenant_id, action_id, coupling_result, runtime_effect]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        action_id: { type: string }
+        actor_entity_id: { type: string }
+        principal_entity_id: { type: string }
+        purpose_grant_id: { type: string }
+        evaluated_at: { type: string, format: date-time }
+        pipeline_node: { type: string }
+        anchors_consulted: { type: array, items: { type: object } }
+        assumptions: { type: array, items: { type: object } }
+        coupling_result: { $ref: '#/components/schemas/CouplingResult' }
+        runtime_effect: { $ref: '#/components/schemas/RuntimeEffect' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        reason_codes: { type: array, items: { type: string } }
+        drift_event_id: { type: string }
+        snapshot_refs: { type: array, items: { type: string } }
+        evidence_refs: { type: array, items: { type: string } }
+        notes: { type: string, maxLength: 4096 }
+
+    RealityCouplingCheckDecide:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [override, accept, escalate] }
+        rationale: { type: string, maxLength: 4096 }
+
+    RealityCouplingCheckEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        reality-coupling-check: { $ref: '#/components/schemas/RealityCouplingCheck' }
+
+    RealityCouplingCheckList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        reality-coupling-checks:
+          type: array
+          items: { $ref: '#/components/schemas/RealityCouplingCheck' }
+
+    # -----------------------------------------------------------------------
+    # Stable Drift Event
+    # -----------------------------------------------------------------------
+    StableDriftEvent:
+      type: object
+      properties:
+        id: { $ref: '#/components/schemas/KyeId' }
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        check_id: { $ref: '#/components/schemas/KyeId' }
+        action_id: { type: string }
+        drift_type: { $ref: '#/components/schemas/DriftType' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        detected_at: { type: string, format: date-time }
+        recommended_runtime_effect: { $ref: '#/components/schemas/RuntimeEffect' }
+        status: { type: string, enum: [open, acknowledged, resolved, quarantined] }
+        acknowledged_at: { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time }
+        quarantined_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+
+    StableDriftEventCreate:
+      type: object
+      required: [tenant_id, check_id, action_id, drift_type, severity]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/KyeId' }
+        check_id: { $ref: '#/components/schemas/KyeId' }
+        action_id: { type: string }
+        actor_entity_id: { type: string }
+        principal_entity_id: { type: string }
+        drift_type: { $ref: '#/components/schemas/DriftType' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        detected_at: { type: string, format: date-time }
+        anchors_implicated: { type: array, items: { type: object } }
+        expected_state: { type: object }
+        observed_state: { type: object }
+        description: { type: string, maxLength: 4096 }
+        reason_codes: { type: array, items: { type: string } }
+        recommended_runtime_effect: { $ref: '#/components/schemas/RuntimeEffect' }
+        recommended_obligations: { type: array, items: { type: string } }
+        evidence_refs: { type: array, items: { type: string } }
+
+    StableDriftEventResolve:
+      type: object
+      required: [resolution]
+      properties:
+        resolution: { type: string, enum: [recoupled, tolerated, escalated, revoked] }
+        rationale: { type: string, maxLength: 4096 }
+
+    StableDriftEventEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        stable-drift-event: { $ref: '#/components/schemas/StableDriftEvent' }
+
+    StableDriftEventList:
+      type: object
+      properties:
+        ok: { type: boolean }
+        total: { type: integer }
+        stable-drift-events:
+          type: array
+          items: { $ref: '#/components/schemas/StableDriftEvent' }

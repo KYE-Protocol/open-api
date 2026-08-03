@@ -1,0 +1,2471 @@
+openapi: "3.1.0"
+info:
+  title: KYE Protocol™ App API
+  version: "1.0.0"
+  description: |
+    Clerk-gated customer app surface for app.kyeprotocol.com.
+    All endpoints require a Clerk JWT. Responses are automatically
+    scoped to the caller's tenant derived from the JWT org_id.
+    All entity endpoints are read-only for tenant principals.
+
+servers:
+  - url: https://app.kyeprotocol.com/api/v1
+    description: Production app surface
+
+security:
+  - ClerkBearer: []
+
+components:
+  securitySchemes:
+    ClerkBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk RS256 JWT; tenant_id derived from org_id
+    ApiKeyBearer:
+      type: http
+      scheme: bearer
+      description: >
+        Minted API key (kye_<live|test>_…) from /api-keys. Accepted on the
+        /runtime/* paths only; resolved server-side via its SHA-256 key_hash
+        (D1 migration 037) to the issuing tenant — never trusted from client
+        headers. Per-key scope enforcement (runtime:write or runtime:*
+        required to evaluate).
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Cross-tenant access attempt
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: Required D1 / service binding not attached (db_binding_missing)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: { type: boolean, enum: [false] }
+        error: { type: string }
+
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean, enum: [true] }
+
+paths:
+  # ── Tenant (self) ──────────────────────────────────────────────────────────
+  /tenants:
+    get:
+      operationId: getMyTenant
+      summary: Get caller's own tenant
+      tags: [Tenants]
+      responses:
+        "200": { description: OK }
+        "404": { description: Tenant not yet provisioned }
+
+  /tenants/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getTenantById
+      summary: Get tenant by id (only own tenant allowed)
+      tags: [Tenants]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /reports:
+    get:
+      operationId: listMyReports
+      summary: List signed report envelopes for the caller's tenant (KYE Reporting Engine™ tenant view)
+      tags: [Tenants]
+      responses:
+        "200": { description: OK }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /settings:
+    get:
+      operationId: getMyTenantSettings
+      summary: Load merged tenant settings
+      tags: [Tenants]
+      responses:
+        "200": { description: OK }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      operationId: patchMyTenantSettings
+      summary: Update one or more tenant settings fields
+      tags: [Tenants]
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid field }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ── Read-only entity endpoints (auto-scoped to caller's tenant) ────────────
+  /legal-entities:
+    get:
+      operationId: listMyLegalEntities
+      tags: [LegalEntities]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200": { description: OK }
+
+  /legal-entities/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyLegalEntity
+      tags: [LegalEntities]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /billing-accounts:
+    get:
+      operationId: listMyBillingAccounts
+      tags: [BillingAccounts]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /billing-accounts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyBillingAccount
+      tags: [BillingAccounts]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /domains:
+    get:
+      operationId: listMyDomains
+      tags: [Domains]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /domains/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyDomain
+      tags: [Domains]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /policies:
+    get:
+      operationId: listMyPolicies
+      tags: [Policies]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /policies/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyPolicy
+      tags: [Policies]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /workspaces:
+    get:
+      operationId: listMyWorkspaces
+      tags: [Workspaces]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /workspaces/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyWorkspace
+      tags: [Workspaces]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /projects:
+    get:
+      operationId: listMyProjects
+      tags: [Projects]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /projects/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyProject
+      tags: [Projects]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /teams:
+    get:
+      operationId: listMyTeams
+      tags: [Teams]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /teams/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyTeam
+      tags: [Teams]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /principals:
+    get:
+      operationId: listMyPrincipals
+      tags: [Principals]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /principals/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyPrincipal
+      tags: [Principals]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /resources:
+    get:
+      operationId: listMyResources
+      tags: [Resources]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /resources/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyResource
+      tags: [Resources]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /models:
+    get:
+      operationId: listMyModels
+      tags: [Models]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /models/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyModel
+      tags: [Models]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /tools:
+    get:
+      operationId: listMyTools
+      tags: [Tools]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /tools/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyTool
+      tags: [Tools]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /external-apps:
+    get:
+      operationId: listMyExternalApps
+      tags: [ExternalApps]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /external-apps/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyExternalApp
+      tags: [ExternalApps]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /audit-streams:
+    get:
+      operationId: listMyAuditStreams
+      tags: [AuditStreams]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+
+  /audit-streams/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyAuditStream
+      tags: [AuditStreams]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ── State Events ───────────────────────────────────────────────────────────
+  /state-events:
+    get:
+      operationId: listMyStateEvents
+      summary: List state events for an entity (tenant-scoped)
+      tags: [StateRegistry]
+      parameters:
+        - { name: entity_id, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: OK }
+        "400": { description: entity_id required }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /state-events/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getMyStateEvent
+      tags: [StateRegistry]
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ── State Library (customer read + adopt) ──────────────────────────────────
+  /state-library:
+    get:
+      operationId: browseStateLibrary
+      summary: Browse published KYE State Library entries
+      tags: [StateLibrary]
+      parameters:
+        - { name: category, in: query, schema: { type: string } }
+        - { name: include, in: query, schema: { type: string, enum: [full] } }
+      responses:
+        "200": { description: OK }
+
+  /state-machines/from-library:
+    get:
+      operationId: listMyDerivations
+      summary: List state machine derivations for caller's tenant
+      tags: [StateLibrary]
+      responses:
+        "200": { description: OK }
+    post:
+      operationId: app.adoptFromLibrary
+      summary: Adopt a State Library entry into caller's tenant
+      tags: [StateLibrary]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [library_id, library_version, tenant_entity_class]
+              properties:
+                library_id: { type: string }
+                library_version: { type: string, example: "1.0.0" }
+                tenant_entity_class: { type: string }
+                overrides:
+                  type: object
+                  properties:
+                    added_states: { type: array }
+                    added_transitions: { type: array }
+                    tightened_guards: { type: array }
+                    extra_obligations: { type: array }
+      responses:
+        "200": { description: OK }
+        "400": { description: Validation error }
+        "404": { description: Library entry not found }
+        "409": { description: Seal mismatch }
+
+  # ── Analytics plane (§20 — tenant-scoped D1 aggregates) ────────────────────
+  /analytics-decisions-per-hour:
+    get:
+      operationId: app-get-analytics-decisions-per-hour
+      summary: Hourly decision rollup for the caller's tenant
+      description: >
+        Aggregates the tenant's decisions ledger into hourly buckets with
+        per-verdict counts (allow / deny / review / quarantine). The window is
+        capped at 90 days; longer windows are served by the warehouse path on
+        the gateway-worker. Powers the usage sparkline and dashboard
+        time-series drilldowns.
+      tags: [Analytics]
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time }, description: Window start (defaults to until minus 7 days) }
+        - { name: until, in: query, schema: { type: string, format: date-time }, description: Window end (defaults to now) }
+      responses:
+        "200": { description: "Hourly rows with decision_count, allow_count, deny_count, review_count, quarantine_count" }
+        "400": { description: "Invalid since/until, since not before until, or window over 90 days" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /analytics-widget-calls:
+    get:
+      operationId: app-get-analytics-widget-calls
+      summary: Per-widget call counts for the caller's tenant
+      description: >
+        Groups the tenant's widget_calls telemetry by widget_slug over the
+        requested window (default trailing 7 days), reporting total and
+        successful call counts per widget.
+      tags: [Analytics]
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time }, description: Window start (defaults to until minus 7 days) }
+        - { name: until, in: query, schema: { type: string, format: date-time }, description: Window end (defaults to now) }
+      responses:
+        "200": { description: "Per-widget summary rows with widget_slug, total_calls, ok_calls" }
+        "400": { description: Invalid since or until timestamp }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Dashboards (§08 §13 — realtime customer dashboard) ─────────────────────
+  /dashboard-stats:
+    get:
+      operationId: app-get-dashboard-stats
+      summary: Seven top-level dashboard KPIs for the caller's tenant
+      description: >
+        Honest D1 aggregates scoped to the caller's tenant — decisions today,
+        pending reconfirmations (Purpose Permissions expiring within 30 days),
+        open drift events, evidence packs awaiting sign-off, 24h decision
+        breakdown, authority finality (in-force / attenuated / revoked
+        delegations + p99 lookup), and the most active agent today. Cold
+        tenants get flat zeros, never fabricated values.
+      tags: [Dashboard]
+      responses:
+        "200": { description: KPI snapshot for the tenant }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /dashboard-snapshot:
+    get:
+      operationId: app-get-dashboard-snapshot
+      summary: Combined dashboard snapshot (SSE poll-fallback)
+      description: >
+        Poll fallback for clients whose EventSource connection to
+        /stream/dashboard fails. Returns the last 50 decisions, the authority
+        graph, the 24x7 density heatmap, the edge infra topology, and the §0.3
+        attestation envelope for the read. A client-supplied tenant_id that
+        diverges from the session-resolved tenant is refused per §0.11.
+      tags: [Dashboard]
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string }, description: Optional echo of the caller's tenant; refused with 403 if it diverges from the session }
+      responses:
+        "200": { description: "Snapshot with decisions, density_heatmap, authority_graph, infra_topology, attestation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: cross_tenant_smuggle_refused — client tenant_id diverges from session (refusal attestation included) }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /stream/dashboard:
+    get:
+      operationId: app-get-stream-dashboard
+      summary: Server-Sent Events stream for the realtime dashboard
+      description: >
+        Long-lived text/event-stream emitting typed events — subscribe
+        envelope on open, then decision, authority_change, metric_tick and
+        25-second ping heartbeats, with a closing kye.compliance.attestation.v1
+        envelope. Connections are capped at 5 minutes; EventSource
+        auto-reconnect re-verifies the rotating Clerk JWT. Client-supplied
+        tenant_id diverging from the session is refused before the stream
+        opens (§0.11).
+      tags: [Dashboard]
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string }, description: Optional echo of the caller's tenant; refused with 403 if it diverges from the session }
+      responses:
+        "200":
+          description: SSE stream of kye.dashboard.event.v1 frames
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: cross_tenant_smuggle_refused — client tenant_id diverges from session }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /density-heatmap:
+    get:
+      operationId: app-get-density-heatmap
+      summary: 24x7 decision-density grid for the caller's tenant
+      description: >
+        Buckets the tenant's decisions by UTC day-of-week and hour-of-day into
+        a kye.density_heatmap.v1 snapshot with per-cell allow / deny / review
+        counts. Default window is the trailing 7 days.
+      tags: [Dashboard]
+      parameters:
+        - { name: days, in: query, schema: { type: integer, default: 7, minimum: 1, maximum: 30 }, description: Trailing window in days }
+        - { name: tenant_id, in: query, schema: { type: string }, description: Optional echo of the caller's tenant; refused with 403 if it diverges from the session }
+      responses:
+        "200": { description: "kye.density_heatmap.v1 snapshot with cells, max_cell_count, total_count, attestation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: cross_tenant_smuggle_refused — client tenant_id diverges from session }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /authority-graph:
+    get:
+      operationId: app-get-authority-graph
+      summary: Tenant-wide authority graph of in-force delegations
+      description: >
+        Derives a kye.authority_graph.v1 node/edge graph from the tenant's
+        most recent 200 delegations — nodes classified by URN segment (agent /
+        capability / scope / policy / delegate / principal), edges typed
+        delegates_to with an in_force flag and audit_ref. Includes a §0.3
+        attestation envelope.
+      tags: [Authority]
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string }, description: Optional echo of the caller's tenant; refused with 403 if it diverges from the session }
+      responses:
+        "200": { description: "kye.authority_graph.v1 snapshot with nodes, edges, attestation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: cross_tenant_smuggle_refused — client tenant_id diverges from session }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /infra-topology:
+    get:
+      operationId: app-get-infra-topology
+      summary: Edge-infrastructure topology snapshot
+      description: >
+        Returns the kye.infra_topology.v1 graph (Worker, D1, Queue, R2, KV
+        nodes plus read/write/produce/consume edges) for the
+        kye-infra-topology web component. Each node carries the §51 No-SPOF
+        posture; D1 status reflects whether the KYE_DB binding is reachable.
+        Per-tenant throughput values are honest zeros until the per-binding
+        counter export ships.
+      tags: [Dashboard]
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string }, description: Optional echo of the caller's tenant; refused with 403 if it diverges from the session }
+      responses:
+        "200": { description: "kye.infra_topology.v1 snapshot with nodes, edges, attestation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: cross_tenant_smuggle_refused — client tenant_id diverges from session }
+
+  # ── Entity inventory + hierarchy + search ──────────────────────────────────
+  /entities:
+    get:
+      operationId: app-get-entities
+      summary: List the tenant's entity inventory with KPI roll-up
+      description: >
+        Every actor bound to the tenant — principals, agents, model endpoints,
+        tools, datasets, connectors, partners — each identified by a stable
+        kye URN. Read-only; entities are registered through the Operating
+        Model authoring flow, not created here. KPI counts agents, people and
+        tools by entity class.
+      tags: [Entities]
+      responses:
+        "200": { description: "Entity list with id, entity_class, display_name, trust_domain, status, last_seen, plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-register-entity
+      summary: Admit an entity into the governed graph
+      description: >
+        The admission half of the one governed register. Validates the request
+        against kye.entity_registration.v1, checks whether the registrant may
+        register into this trust domain, then runs the decision engine for the
+        action entity.register. entity.register is a consequential action, so a
+        request carrying no recorded approval is HELD (202) and nothing is
+        written; the row and the decision that admitted it are created together
+        or not at all. trust_domain_id is taken from the verified session and
+        any value supplied in the body is ignored — a caller-asserted scope is
+        not a scope.
+      tags: [Entities]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entity_id, entity_type, registered_by_entity_id, basis]
+              properties:
+                entity_id: { type: string, description: "Canonical entity URN" }
+                entity_type: { type: string }
+                display_name: { type: string, nullable: true }
+                registered_by_entity_id: { type: string, description: "The registering entity's URN" }
+                basis:
+                  type: string
+                  enum: [self_registration, delegated_registration, bulk_import, agent_nomination_admitted, bootstrap_genesis]
+                delegation_id: { type: string, nullable: true, description: "Required for delegated_registration and bulk_import" }
+                nomination_ref: { type: string, nullable: true, description: "Required for agent_nomination_admitted" }
+                consequential_action_classes: { type: array, items: { type: string } }
+                labels: { type: array, items: { type: string } }
+                approval_recorded: { type: boolean, description: "Whether an approval for this admission is on record" }
+      responses:
+        "201": { description: "Admitted — entity_id plus the decision that admitted it" }
+        "202": { description: "Held for approval — reason_code and decision reference; nothing written" }
+        "400": { description: "Contract violation — the offending field is named" }
+        "403": { description: "Refused — registrant may not register into this trust domain" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /hierarchy:
+    get:
+      operationId: app-get-hierarchy
+      summary: Entity-relation tree for the caller's tenant
+      description: >
+        Builds the full adjacency-list tree from the tenant's hierarchy nodes
+        (delegation / containment / binding edges) with a KPI roll-up of
+        node_count, depth, agent_count and principal_count. Read-only — the
+        tree is derived from the operating model, not authored here.
+      tags: [Entities]
+      responses:
+        "200": { description: "Nested tree of nodes with node_class, label, lifecycle, edge_kind, children, plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /search:
+    get:
+      operationId: app-get-search
+      summary: Tenant-scoped search across entities and decisions
+      description: >
+        Prefers the private kye-search-engine worker over a service binding
+        (signed kye.search_result.v1 envelope, lexical mode); falls back to
+        tenant-scoped D1 LIKE matching across the entities and decisions
+        tables when the binding is absent or the engine errors. An empty q
+        returns an empty hit list.
+      tags: [Search]
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Search term }
+        - { name: index, in: query, schema: { type: string }, description: "Optional index filter (app_entities, decisions, library_entries, state_events, policies)" }
+      responses:
+        "200": { description: "Flat hit list with id, kind, title, snippet (plus score/classification on the engine path); source field names the path taken" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Event Engine queryable index (§37 §4) ───────────────────────────────────
+  /events/search:
+    get:
+      operationId: app-get-events-search
+      summary: Query the tenant's event index
+      description: >
+        Searches the tenant's indexed event store with full-text matching;
+        when a free-text q is supplied. All filters combine with AND; rows are
+        newest-first. Pure read with no mutation.
+      tags: [Events]
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Free-text FTS5 match }
+        - { name: family, in: query, schema: { type: string }, description: Event family id }
+        - { name: action, in: query, schema: { type: string }, description: Action kind }
+        - { name: phase, in: query, schema: { type: string } }
+        - { name: actor, in: query, schema: { type: string }, description: Actor id }
+        - { name: risk, in: query, schema: { type: string }, description: Risk level }
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - { name: until, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        "200": { description: "Echoed query, count, result rows (entry_id, event_family_id, emitted_at, phase, actor, verdict, audit_chain_ref, framework_refs, tags), served_at" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Live runtime decision feed ──────────────────────────────────────────────
+  /live-runtime:
+    get:
+      operationId: app-get-live-runtime
+      summary: Recent PDP decisions with a 5-minute KPI roll-up
+      description: >
+        Newest-first decision events for the caller's tenant with a KPI block
+        covering the last 5 minutes (decisions/min rate plus allow / review /
+        deny percentages) and distinct capability and actor lists for filter
+        dropdowns. Updates the tenant's last-polled cursor. Read-only —
+        decisions are emitted by the PDP, never created here.
+      tags: [Runtime]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 100, minimum: 1, maximum: 500 } }
+        - { name: since, in: query, schema: { type: string, format: date-time }, description: Only decisions decided at or after this instant }
+        - { name: capability, in: query, schema: { type: string }, description: Filter by capability_id }
+        - { name: actor, in: query, schema: { type: string }, description: Matches actor_entity_id or agent_entity_id }
+        - { name: decision, in: query, schema: { type: string }, description: Filter by decision verdict }
+      responses:
+        "200": { description: "Decision rows, kpi (rate, allow_pct, review_pct, deny_pct), capabilities, actors" }
+        "400": { description: invalid_since — unparseable timestamp }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Memory Engine surface ───────────────────────────────────────────────────
+  /memory:
+    get:
+      operationId: app-get-memory
+      summary: List signed agent-memory records for the caller's tenant
+      description: >
+        Reads the agent_memory table, excluding forgotten records. Exposes the
+        observable contract only — id, agent_entity_id, memory_class, purpose,
+        created_at, signed_by_kid — plus total, distinct-agent and
+        distinct-class counts.
+      tags: [Memory]
+      responses:
+        "200": { description: "Memory rows (newest 200) with total, agents_count, classes_count" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Onboarding Rail (§22) ───────────────────────────────────────────────────
+  /onboarding/workflows:
+    get:
+      operationId: app-get-onboarding-workflows
+      summary: Read-only onboarding workflow projection
+      description: >
+        The workflow is a projection of the six per-step rows in the
+        onboarding_steps table — there is no separate workflow store (§0 one
+        source of truth). Returns a single-element array when the tenant has
+        started onboarding, otherwise an empty array.
+      tags: [Onboarding]
+      responses:
+        "200": { description: Array of zero or one kye.onboarding.workflow.v1 objects }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Purpose registry (§12) ──────────────────────────────────────────────────
+  /purposes:
+    get:
+      operationId: app-get-purposes
+      summary: List the tenant's declared purposes with KPI roll-up
+      description: >
+        A purpose is the bounded reason any agent, connector or partner may
+        act — every Purpose Permission grant cites one. Grants themselves live
+        under /purpose-permissions; this registry holds the definitions.
+      tags: [Purposes]
+      responses:
+        "200": { description: "Purpose rows (purpose_id, class, display_name, lawful_basis, active_grants, status) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-purposes
+      summary: Declare a new purpose
+      description: >
+        Mints a kye:purpose URN for the tenant. The class must be a lowercase
+        slug and the lawful basis one of the six GDPR Article 6 bases.
+      tags: [Purposes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [class, display_name, lawful_basis]
+              properties:
+                class: { type: string, pattern: "^[a-z][a-z0-9_]{1,40}$" }
+                display_name: { type: string }
+                lawful_basis:
+                  type: string
+                  enum: [consent, contract, legal_obligation, vital_interests, public_task, legitimate_interests]
+      responses:
+        "201": { description: Created purpose with its minted purpose_id and active status }
+        "400": { description: "invalid_json, invalid_class, display_name_required or invalid_lawful_basis" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Data flow + classification (Data Mapping / Evidence sub-engines) ───────
+  /data-flow-graph:
+    get:
+      operationId: app-get-data-flow-graph
+      summary: List signed data-flow seals for the caller's tenant
+      description: >
+        Exposes the observable contract of the Data Mapping Agent — seal_id,
+        asset_count, flow_count, pii_assets, sealed_at, signed_by_kid — newest
+        first (up to 200), with the latest seal's totals lifted to top-level
+        asset_total / flow_total / pii_assets.
+      tags: [DataGovernance]
+      responses:
+        "200": { description: Seal rows plus latest-seal totals }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /classification:
+    get:
+      operationId: app-get-classification
+      summary: List the tenant's data-asset classifications with KPI roll-up
+      description: >
+        Every classification is tenant-scoped and Ed25519-signed (the signing
+        kid is recorded). KPI counts special-category and restricted assets
+        plus rows still pending a signature.
+      tags: [DataGovernance]
+      responses:
+        "200": { description: "Classification rows (classification_id, asset_id, classification, detection, confidence, signature_kid, effective_at) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-classification
+      summary: Register a new asset classification
+      description: >
+        Records the classification exactly as submitted (effective
+        immediately); signature_kid is stored as supplied — empty until the
+        record is signed.
+      tags: [DataGovernance]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id, classification]
+              properties:
+                asset_id: { type: string }
+                classification:
+                  type: string
+                  enum: [public, internal, confidential, restricted, top_secret, special_category]
+                detection:
+                  type: string
+                  enum: [human_review, regex_scan, llm_inference, gdpr_art9_match, sector_template, schema_inference]
+                  default: human_review
+                confidence: { type: number, minimum: 0, maximum: 1 }
+                signature_kid: { type: string }
+      responses:
+        "201": { description: Created classification with its minted classification_id }
+        "400": { description: "invalid_json, asset_id_required, invalid_classification, invalid_detection or confidence_must_be_0_to_1" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── MOW Search-Only Contract — Publisher Access Ledger (§70-advisory) ──────
+  /publisher-access-ledger:
+    get:
+      operationId: app-get-publisher-access-ledger
+      summary: List the tenant's Publisher Access Ledger snapshots with KPI roll-up
+      description: >
+        Backs the KYE Publisher Access Ledger™ dashboard — the tenant's
+        licensed-vs-breach split, the advisory GBP 500-per-Product accrual per
+        operator, and the possible-spoof surfacing. Every snapshot is
+        tenant-scoped (newest first, up to 200) and the KPI totals sum
+        snapshots / breach_events / possible_spoof_events / accrued_total.
+        The schedule is ADVISORY (§70): the publisher-claimable accrual from
+        attribution signals, never a KYE-metered charge; unknown/unattributed
+        access is never invoiced and possible-spoof is surfaced, not invoiced
+        as certain.
+      tags: [Evidence]
+      responses:
+        "200": { description: "ok, contract_url, honesty{advisory,basis}, kpi roll-up and snapshots[] (each with summary + operators + effective_at)" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-publisher-access-ledger
+      summary: Derive and record a Publisher Access Ledger snapshot from a classified-access report
+      description: >
+        Accepts a kye.crawler_classification.v1 report (records[]) from the
+        collector (Tier A edge or Tier C log ingest), derives the advisory
+        breach schedule via the ONE canonical breach-schedule engine (never
+        re-implemented, §0), and records the tenant-scoped snapshot. The
+        customer-visible response carries a patent-safe evidence reference
+        built only by the canonical publicEvidence() helper (§0.35).
+      tags: [Evidence]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [report]
+              properties:
+                report:
+                  type: object
+                  required: [records]
+                  description: A kye.crawler_classification.v1 instance
+                  properties:
+                    records:
+                      type: array
+                      items: { type: object }
+                access_fee_per_product:
+                  type: integer
+                  description: Per-website Clause 14 override of the advisory GBP 500-per-Product accrual
+                currency: { type: string, default: GBP }
+      responses:
+        "201": { description: "ok, snapshot{snapshot_id, summary, operators, honesty, effective_at} and a patent-safe evidence reference" }
+        "400": { description: "invalid_json, report_records_required or invalid_report" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── GovernedUI action approvals (§36 module 1) ─────────────────────────────
+  /action-approvals:
+    get:
+      operationId: app-get-action-approvals
+      summary: List the tenant's action proposals awaiting or decided review
+      description: >
+        Backs the GovernedUI approval queue (envelope
+        kye.governedui.action_proposal.v1). Optional risk-level and
+        approval-mode filters; KPI counts pending / approved / rejected /
+        escalated proposals.
+      tags: [Approvals]
+      parameters:
+        - { name: risk_level, in: query, schema: { type: string, enum: [low, medium, high, critical] } }
+        - { name: approval_mode, in: query, schema: { type: string, enum: [single_approver, two_person, two_person_with_legal, delegated, auto] } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 500 } }
+      responses:
+        "200": { description: "Proposal rows (proposal_id, actor_id, action_type, target_system, risk_level, approval_mode, state, proposed_at, decided_at, decided_by) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── PDP action history ──────────────────────────────────────────────────────
+  /actions:
+    get:
+      operationId: app-get-actions
+      summary: PDP-mediated action history for the caller's tenant
+      description: >
+        Console-level slice of the shared decisions ledger — each row maps a
+        decision to its action_id, actor, capability, verdict, reason_code and
+        decided_at, newest first.
+      tags: [Actions]
+      parameters:
+        - { name: decision, in: query, schema: { type: string }, description: "Filter by decision verdict; \"all\" or absent returns every verdict" }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 500 } }
+      responses:
+        "200": { description: Action rows derived from the decisions ledger }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Agent registry + activity ───────────────────────────────────────────────
+  /agents:
+    get:
+      operationId: app-get-agents
+      summary: List agents with activity roll-up
+      description: >
+        Merges the explicit agents registry with per-agent activity derived
+        from the decisions ledger (decision_count, last_seen_at, allow /
+        review / deny counts). Registry rows are authoritative for metadata;
+        agents observed only in decisions appear with null metadata. Sorted by
+        last activity.
+      tags: [Agents]
+      responses:
+        "200": { description: Merged agent list with registry metadata and activity counts }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-agents
+      summary: Register a new agent
+      description: >
+        Mints a kye:agent URN. New agents start in the pilot lifecycle state
+        with zero activity — no fabricated counts.
+      tags: [Agents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: { type: string, maxLength: 120 }
+                kind: { type: string, enum: [agent, service, human, model], default: agent }
+                capability_id: { type: string, maxLength: 120 }
+      responses:
+        "201": { description: Registered agent in lifecycle_state pilot }
+        "400": { description: invalid_json or missing_label }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── AI Call Ledger ───────────────────────────────────────────────────────────
+  /ai-calls:
+    get:
+      operationId: app-get-ai-calls
+      summary: Per-call ledger of model invocations
+      description: >
+        Cost, latency, token counts, purpose binding and evidence link for
+        every model invocation; reconciles to provider invoices. Includes
+        tenant-level KPI aggregates and distinct purpose / model lists for
+        filter dropdowns.
+      tags: [AICalls]
+      parameters:
+        - { name: date, in: query, schema: { type: string, format: date }, description: Restrict to a single UTC day (YYYY-MM-DD) }
+        - { name: purpose, in: query, schema: { type: string } }
+        - { name: model, in: query, schema: { type: string } }
+        - { name: min_cost, in: query, schema: { type: number, default: 0 }, description: Only calls with cost at or above this value }
+        - { name: limit, in: query, schema: { type: integer, default: 200, minimum: 1, maximum: 2000 } }
+      responses:
+        "200": { description: "Call rows plus kpis (calls, cost_total, tokens, avg_latency) and distinct purposes/models" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Runtime Authority API ───────────────────────────────────────────────────
+  # App-surface projection of the canonical Core wire-contract operation
+  # `evaluateRuntime` (POST /v1/runtime/evaluate); this surface adds
+  # API-key auth + the receipt deep-link. Registered in the canonical
+  # endpoint registry under surface_bindings (openapi_op: evaluateRuntime).
+  /runtime/evaluate:
+    post:
+      operationId: app-post-runtime-evaluate
+      summary: Evaluate an agent action and return an Authority Finality decision + receipt
+      description: >
+        Runs the deterministic runtime authority decision for one proposed
+        agent action and returns the three-outcome verdict
+        (allow | require_approval | deny), a replay-stable decision_id, a
+        patent-safe evidence reference, a receipt verify_url, and an
+        Ed25519-sealed, offline-verifiable Evidence Pack. Emits the full
+        evidence-event family server-side. Auth is a minted API key
+        (runtime:write or runtime:* scope) or a Clerk session.
+      tags: [Runtime]
+      security:
+        - ApiKeyBearer: []
+        - ClerkBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, purpose]
+              properties:
+                subject:
+                  type: string
+                  description: "KYE URN of the acting agent/principal (e.g. kye:agent:acme:kyc-triage). Alias: agent."
+                agent:
+                  type: string
+                  description: Alias for subject (quickstart-friendly).
+                action:
+                  type: string
+                  description: Dotted capability id (e.g. payments.transfer, kyc.screening.run).
+                purpose:
+                  type: string
+                  description: Declared purpose class the action is bound to.
+                context:
+                  type: object
+                  description: "Optional decision context (amount, jurisdiction, approval_recorded, irreversible, …)."
+      responses:
+        "200":
+          description: >
+            Governed decision: decision (allow | require_approval | deny),
+            reason_code (canonical vocabulary), decision_id
+            (kye:decision:<hex>, replay-stable), evidence (patent-safe
+            audit_reference), verify_url (receipt deep-link on
+            evidence.html), replay_seed, latency_ms, the sealed
+            evidence_pack (Ed25519, offline-verifiable), and meter — the
+            agent_action billing-meter event id plus the honest Stripe
+            transmission state (pending_configuration |
+            pending_customer_link | scheduled_hourly_forwarding |
+            forwarded_per_call | forward_failed_recorded_locally) plus
+            quota consumption when enforced. Transmission granularity is
+            configurable: batch_hourly (default — the canonical hourly
+            meter pipeline is the ONE Stripe reporter) or per_call
+            (KYE_STRIPE_METER_GRANULARITY=per_call — an immediate
+            idempotent push once Stripe keys are configured).
+        "400": { description: "invalid_json | missing_subject | subject_not_kye_urn | missing_action | action_malformed | missing_purpose" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: "permission_scope_exceeded — key lacks runtime:write / runtime:*" }
+        "429":
+          description: >
+            quota_exceeded — the tenant's monthly agent_action quota is
+            exhausted (governed refusal with a patent-safe evidence
+            reference and quota {used, limit, remaining, resets_at};
+            configure via KYE_AGENT_ACTION_MONTHLY_QUOTA, 0 = unlimited).
+
+  # ── API keys ────────────────────────────────────────────────────────────────
+  /webhooks:
+    get:
+      operationId: app-get-webhooks
+      summary: List the caller's tenant's webhook endpoints
+      description: >
+        Returns endpoint metadata only. The signing secret is stored (KYE must
+        sign each outbound delivery with it) but is NEVER returned here — only a
+        short non-usable hint. Includes a 30-day delivery summary per endpoint.
+      tags: [Webhooks]
+      x-kye-source-file: public/app/functions/api/v1/webhooks.js
+      responses:
+        "200":
+          description: Endpoint list for the caller's tenant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  tenant_id: { type: string }
+                  operation_id: { type: string, enum: [app-get-webhooks] }
+                  kpi:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      active: { type: integer }
+                      disabled: { type: integer }
+                  endpoints:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        subscriber_id: { type: string, pattern: "^kye:webhook:" }
+                        endpoint_url: { type: string, format: uri }
+                        signal_types: { type: array, items: { type: string } }
+                        status: { type: string, enum: [active, disabled] }
+                        signing_secret_hint: { type: [string, "null"] }
+                        delivery_30d:
+                          type: object
+                          properties:
+                            total: { type: integer }
+                            delivered: { type: integer }
+                        created_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503":
+          description: Database binding unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    post:
+      operationId: app-post-webhooks
+      summary: Register a webhook endpoint (signing secret returned once)
+      description: >
+        Registers an HTTPS endpoint for governance-event delivery. The signing
+        secret is generated server-side and returned EXACTLY once — no endpoint
+        will hand it back. Plain http is refused rather than downgraded. One
+        active subscription per endpoint URL per tenant.
+      tags: [Webhooks]
+      x-kye-source-file: public/app/functions/api/v1/webhooks.js
+      x-kye-emits-envelopes: [kye.evidence.decision_map.v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint_url]
+              properties:
+                endpoint_url: { type: string, format: uri, maxLength: 2000, description: "Absolute HTTPS URL" }
+                signal_types:
+                  type: array
+                  minItems: 1
+                  items: { type: string }
+                  description: "Defaults to every canonical signal type when omitted"
+      responses:
+        "201":
+          description: Endpoint registered; signing secret returned once
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  operation_id: { type: string, enum: [app-post-webhooks] }
+                  subscriber_id: { type: string, pattern: "^kye:webhook:" }
+                  endpoint_url: { type: string, format: uri }
+                  signal_types: { type: array, items: { type: string } }
+                  status: { type: string, enum: [active] }
+                  created_at: { type: string, format: date-time }
+                  signing_secret: { type: string, description: "Shown once; never retrievable" }
+                  signing_secret_notice: { type: string }
+                  evidence: { type: object, additionalProperties: true }
+        "400":
+          description: Invalid JSON, non-HTTPS or malformed URL, or unknown signal type
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: An active subscription already exists for this endpoint URL
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: Database binding unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /webhooks/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: "^kye:webhook:" } }
+    get:
+      operationId: app-get-webhook
+      summary: Read one webhook endpoint
+      description: >
+        Tenant-scoped read. An id belonging to another tenant resolves to 404,
+        never to another tenant's record (§0.11).
+      tags: [Webhooks]
+      x-kye-source-file: public/app/functions/api/v1/webhooks/[id].js
+      responses:
+        "200":
+          description: Endpoint detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  operation_id: { type: string, enum: [app-get-webhook] }
+                  subscriber_id: { type: string }
+                  endpoint_url: { type: string, format: uri }
+                  signal_types: { type: array, items: { type: string } }
+                  status: { type: string, enum: [active, disabled] }
+                  created_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Unknown endpoint for this tenant
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      operationId: app-delete-webhook
+      summary: Disable a webhook endpoint
+      description: >
+        Disables rather than row-deletes: `webhook_deliveries` rows reference
+        `subscriber_id`, so a hard delete would orphan the delivery history the
+        §30 audit trail depends on. Deliveries stop immediately. Idempotent —
+        disabling an already-disabled endpoint returns 200 with idempotent true.
+      tags: [Webhooks]
+      x-kye-source-file: public/app/functions/api/v1/webhooks/[id].js
+      x-kye-emits-envelopes: [kye.evidence.decision_map.v1]
+      responses:
+        "200":
+          description: Endpoint disabled (or already disabled)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  idempotent: { type: boolean }
+                  operation_id: { type: string, enum: [app-delete-webhook] }
+                  subscriber_id: { type: string }
+                  status: { type: string, enum: [disabled] }
+                  evidence: { type: object, additionalProperties: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Unknown endpoint for this tenant
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /api-keys:
+    get:
+      operationId: app-get-api-keys
+      summary: List API keys for the caller's tenant
+      description: >
+        Returns key metadata only — id, label, display prefix, scope, env,
+        created_by/at, last_used_at, revoked_at. The secret is never stored;
+        only its SHA-256 hash is persisted.
+      tags: [ApiKeys]
+      responses:
+        "200": { description: Key metadata rows (no secrets) }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-api-keys
+      summary: Create a new API key (secret returned once)
+      description: >
+        Mints a kye_<live|test>_ key with 192 bits of entropy. The plaintext
+        secret is returned exactly once in this response; only its SHA-256
+        hash and 12-character display prefix are persisted. Unrecognised
+        scopes are dropped; an empty scope defaults to runtime:read.
+      tags: [ApiKeys]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: { type: string, maxLength: 80 }
+                scope:
+                  type: string
+                  description: "Comma-separated scopes from the canonical kye:dictionary:api-key-scopes: runtime:read, runtime:write, runtime:*, evidence:read, evidence:write, attestation:write, directory:read, directory:write, admin:*"
+                env: { type: string, enum: [live, test], default: live }
+                ttl_days:
+                  type: integer
+                  minimum: 1
+                  maximum: 365
+                  description: "Optional TTL in days. When set, the key carries expires_at = created_at + ttl_days and stops verifying after it. Omit for a long-lived key."
+                ip_allowlist:
+                  type: array
+                  items: { type: string }
+                  description: "Optional CIDR/IP allowlist. When set, the verifier rejects a presented key from any source IP outside the list."
+      responses:
+        "201": { description: "Key metadata (incl. expires_at) plus the one-time plaintext secret, an Authority Finality receipt (patent-safe evidence), and a copy-now warning" }
+        "400": { description: invalid_json, missing_label or invalid_ttl }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api-keys/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: app-delete-api-keys-by-id
+      summary: Revoke an API key (governed hard-kill)
+      description: Sets status=revoked + revoked_at on the tenant's key and emits kye.admin.api_key.revoked.v1 to the WORM chain. Idempotent revocations of an already-revoked or unknown key return 404.
+      tags: [ApiKeys]
+      responses:
+        "200": { description: "Revoked — returns id, revoked_at and an Authority Finality receipt" }
+        "404": { description: not_found_or_already_revoked }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api-keys/{id}/rotate:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: app-post-api-keys-rotate
+      summary: Rotate an API key (mint successor + grace-window the predecessor)
+      description: >
+        Mints a successor key inheriting the predecessor's scope/env, marks the
+        predecessor status=rotated with a bounded grace window (default 3600s,
+        during which it still verifies before it expires), and emits
+        kye.admin.api_key.rotated.v1 to the WORM chain. The plaintext successor
+        secret is returned exactly once. The executable form of continuously
+        re-earned authority (§0.33).
+      tags: [ApiKeys]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                grace_seconds: { type: integer, minimum: 0, maximum: 604800, default: 3600 }
+                reason: { type: string, maxLength: 200 }
+      responses:
+        "201": { description: "Successor key metadata + one-time secret + Authority Finality receipt" }
+        "404": { description: not_found_or_not_active }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api-keys/agent/issue:
+    post:
+      operationId: app-post-api-keys-agent-issue
+      summary: Agent-callable M2M issuance of a short-lived heartbeat-bound key
+      description: >
+        The doctrine-core path (§0.30 agent principal, §0.33 Authority Finality™):
+        an agent obtains a SHORT-LIVED, HEARTBEAT-BOUND bearer key whose authority
+        must be continuously re-earned. The key carries a near-term expiry and a
+        heartbeat binding; missing the check-in loses the mandate (#160). Governed
+        identically to human issuance (§0.3 evidence family + metering). Kill-
+        switchable via KYE_KEY_AUTHORITY_AGENT_ISSUE_DISABLED.
+      tags: [ApiKeys]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [principal_id]
+              properties:
+                principal_id: { type: string, description: "The agent principal (kye:agent:* / kye:principal:*) the key is bound to." }
+                label: { type: string, maxLength: 80 }
+                scope: { type: string, description: "Comma-separated canonical scopes (defaults runtime:read)." }
+                ttl_seconds: { type: integer, minimum: 30, maximum: 3600, default: 300, description: "Short TTL. Capped low — this is not a long-lived credential." }
+                heartbeat_interval_seconds: { type: integer, minimum: 30, maximum: 3600, default: 300 }
+      responses:
+        "201": { description: "Short-lived key metadata (incl. expires_at + heartbeat) + one-time secret + Authority Finality receipt" }
+        "400": { description: invalid_json or missing_principal_id }
+        "403": { description: agent_issuance_disabled (kill-switch) }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api-keys/agent/{id}/renew:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: app-post-api-keys-agent-renew
+      summary: Agent-callable heartbeat renewal (re-earn the mandate)
+      description: >
+        Re-earns a heartbeat-bound key's authority: a renewal MUST pass a fresh
+        admissibility check (§12 PDP) within the heartbeat window, extending
+        expires_at by one interval and stamping last_heartbeat_at. A renewal
+        outside the window is denied — the mandate is already lost and the key
+        must be re-issued. This is authority as a STATE you continuously re-earn,
+        not a grant you keep. Governed (§0.3) + metered (§23).
+      tags: [ApiKeys]
+      responses:
+        "200": { description: "Renewed — new expires_at + Authority Finality receipt" }
+        "403": { description: heartbeat_window_missed or not_a_heartbeat_key }
+        "404": { description: not_found_or_not_active }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Installed apps ──────────────────────────────────────────────────────────
+  /apps:
+    get:
+      operationId: app-get-apps
+      summary: List the tenant's installed apps with KPI roll-up
+      description: >
+        Apps are tenant-installed AI agents, copilots, runbooks and
+        partner-supplied integrations operating under the tenant's Operating
+        Model. KPI counts active (calls in last 24h), shadow-mode and
+        suspended apps.
+      tags: [Apps]
+      responses:
+        "200": { description: "App rows (app_id, category, display_name, mode, status, calls_24h) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-apps
+      summary: Install an app
+      description: >
+        Mints a kye:app URN. A freshly installed app starts active with zero
+        call counts; shadow mode logs decisions without enforcing them.
+      tags: [Apps]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, display_name]
+              properties:
+                category: { type: string, enum: [ai_agent, copilot, runbook, integration, connector_app] }
+                display_name: { type: string }
+                mode: { type: string, enum: [shadow, advisory, guarded, strict], default: shadow }
+      responses:
+        "201": { description: Installed app with its minted app_id }
+        "400": { description: "invalid_json, invalid_category, display_name_required or invalid_mode" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Assurance cards ─────────────────────────────────────────────────────────
+  /assurance-cards:
+    get:
+      operationId: app-get-assurance-cards
+      summary: List the tenant's assurance cards with KPI roll-up
+      description: >
+        Assurance cards are time-bounded signed attestations mapping real
+        evidence to regulatory framework controls, on a 90-day rotation per
+        §0.3. KPI counts active, expiring (within 30 days), expired cards and
+        distinct frameworks covered.
+      tags: [AssuranceCards]
+      responses:
+        "200": { description: "Card rows (card_id, framework, controls, scope, status, attested_at, expires_at, verifier_url) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-assurance-cards
+      summary: Generate a new assurance card
+      description: >
+        Mints a kye:assurance-card URN with honest timestamps — attested now,
+        expiring 90 days later — and a public verifier URL. Controls must be a
+        non-empty array of control identifiers.
+      tags: [AssuranceCards]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [framework, controls, scope]
+              properties:
+                framework:
+                  type: string
+                  enum: [SOC2, ISO27001, ISO42001, EU_AI_ACT, DORA, FCA_OPRES, NIST_AI_RMF, OSCAL]
+                controls:
+                  type: array
+                  minItems: 1
+                  items: { type: string }
+                scope: { type: string }
+      responses:
+        "201": { description: "Created card with verifier_url and a 90-day expires_at" }
+        "400": { description: "invalid_json, invalid_framework, scope_required or controls_required_array" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Audit trail (hash-chained) ──────────────────────────────────────────────
+  /audit-events:
+    get:
+      operationId: app-get-audit-events
+      summary: Query the tenant's append-only hash-chained audit trail
+      description: >
+        Each row stores prev_hash and a SHA-256 hash over the canonical JSON
+        of (seq, event, actor, summary, at, prev_hash) so the chain is
+        client-verifiable by recomputing from seq=1. Rows are returned newest
+        first.
+      tags: [AuditEvents]
+      parameters:
+        - { name: family, in: query, schema: { type: string }, description: Event-name prefix filter }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: q, in: query, schema: { type: string }, description: "Substring match across actor, summary and id" }
+        - { name: limit, in: query, schema: { type: integer, default: 200, minimum: 1, maximum: 500 } }
+      responses:
+        "200": { description: "Event rows with seq, event, actor, summary, at, prev_hash, hash" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-audit-events
+      summary: Append an event to the tenant's audit chain
+      description: >
+        Appends the next sequence entry, linking prev_hash to the prior row
+        (or a 64-zero genesis) and hashing the canonical JSON. Normally driven
+        by the runtime; exposed so admins can record compliance markers such
+        as a manually attested evidence pack.
+      tags: [AuditEvents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event]
+              properties:
+                event: { type: string, maxLength: 120 }
+                actor: { type: string, maxLength: 200, description: Defaults to the caller's email or user id }
+                summary: { type: string, maxLength: 500 }
+      responses:
+        "201": { description: "Appended event with its seq, prev_hash and hash" }
+        "400": { description: invalid_json or missing_event }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Authority Wallet ─────────────────────────────────────────────────────────
+  /authority-wallet:
+    get:
+      operationId: app-get-authority-wallet
+      summary: List the tenant's wallet credentials with KPI roll-up
+      description: >
+        A wallet credential is a presentable, revocable,
+        downstream-delegatable authority grant held by the tenant principal.
+        Read-only — credentials enter the wallet when grants are accepted or
+        Operating Model seals are published. KPI counts active credentials,
+        active delegations issued, credentials presentable for at most 30 more
+        days, and revocations in the last 30 days; includes distinct holders
+        for the filter bar.
+      tags: [Authority]
+      responses:
+        "200": { description: "Credential rows (credential_id, credential_class, issuer, holder, presentable_until, status, issued_at, revoked_at) plus kpi and holders" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Behaviour Model authoring (§18) ─────────────────────────────────────────
+  /behaviour-model:
+    get:
+      operationId: app-get-behaviour-model
+      summary: Load the tenant's latest behaviour-model revision
+      description: >
+        Returns the highest revision of the tenant's behaviour model (allowed
+        actions, obligations, stop-conditions, escalation paths). A tenant
+        with no model yet gets revision 0 with empty rows.
+      tags: [BehaviourModel]
+      responses:
+        "200": { description: "Latest revision with rows, signed flag, updated_at, updated_by" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      operationId: app-put-behaviour-model
+      summary: Replace the tenant's behaviour model (new immutable revision)
+      description: >
+        Inserts a new unsigned revision; prior revisions are kept immutable
+        for sign-off and replay. Rows are shape-validated and capped at 500;
+        string fields are length-clamped.
+      tags: [BehaviourModel]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rows]
+              properties:
+                rows:
+                  type: array
+                  maxItems: 500
+                  items:
+                    type: object
+                    properties:
+                      action: { type: string, maxLength: 120 }
+                      purpose_class: { type: string, maxLength: 120 }
+                      obligation: { type: string, maxLength: 400 }
+                      stop_condition: { type: string, maxLength: 400 }
+                      escalation: { type: string, maxLength: 200 }
+                      state: { type: string, maxLength: 40, default: draft }
+      responses:
+        "200": { description: "New revision number, accepted row count and updated_at" }
+        "400": { description: invalid_json or rows_array_required }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Billing (§23 — canonical kye_grants read-model) ─────────────────────────
+  /billing:
+    get:
+      operationId: app-get-billing
+      summary: All-in-one billing view (subscription + invoices + seats)
+      description: >
+        Reads the canonical kye_grants store (binding KYE_GRANTS_DB, populated
+        by the commercial-lifecycle worker's Stripe projection): latest
+        subscription, up to 50 invoices with hosted Stripe URLs, and
+        attestation seats. Returns 503 db_binding_missing until the
+        KYE_GRANTS_DB binding is attached to the Pages project.
+      tags: [Billing]
+      responses:
+        "200": { description: "subscription (or null), invoices, seats" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-billing
+      summary: Run the BPS fee simulator
+      description: >
+        Pure function per §23 §4 — 3 basis points on the transaction value
+        with a £5 floor and £50 cap. The only supported action is
+        bps_simulate.
+      tags: [Billing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [bps_simulate] }
+                value_pence: { type: integer, minimum: 0, description: Transaction value in pence }
+                currency: { type: string, default: GBP }
+                action_class: { type: string, default: payments }
+      responses:
+        "200": { description: "Fee breakdown: rate_bps, computed_fee_pence, final_fee_pence, was_floored, was_capped" }
+        "400": { description: invalid_json or unsupported_action }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Connectors + evidence import ────────────────────────────────────────────
+  /connectors:
+    get:
+      operationId: app-get-connectors
+      summary: List the tenant's installed connectors with KPI roll-up
+      description: >
+        Connectors bring outside-system events into the tenant's KYE evidence
+        stream; the canonical kind vocabulary is kye:dictionary:connectors.
+        KPI counts healthy, degraded and disconnected connectors.
+      tags: [Connectors]
+      responses:
+        "200": { description: "Connector rows (connector_id, kind, profile_family, display_name, status, last_harvest_at, events_24h) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-connectors
+      summary: Install a connector
+      description: >
+        Mints a kye:connector URN. A freshly installed connector is
+        disconnected until its first authenticated harvest — honest initial
+        state, no fabricated health.
+      tags: [Connectors]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, display_name, profile_family]
+              properties:
+                kind: { type: string, pattern: "^[a-z][a-z0-9_]{1,40}$" }
+                display_name: { type: string }
+                profile_family:
+                  type: string
+                  enum: [payments, open_finance, identity, agent_runtime, commerce, compliance_evidence, security_siem, health, insurance, pension, utilities, legal, open_data]
+      responses:
+        "201": { description: Installed connector in disconnected status }
+        "400": { description: "invalid_json, invalid_kind, display_name_required or invalid_profile_family" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /evidence-import:
+    get:
+      operationId: app-get-evidence-import
+      summary: List the tenant's recent evidence imports
+      description: >
+        Tenant-visible history of GRC-export imports — source tool, target
+        kind, format and row / mapped / error counts for the latest 100
+        batches.
+      tags: [Evidence]
+      responses:
+        "200": { description: Import history rows }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-evidence-import
+      summary: Map a GRC-tool export into a canonical evidence batch
+      description: >
+        Forwards the upload to the single canonical mapping engine
+        (kye-evidence-import-worker) over a service binding with the worker
+        bearer, then records the import for tenant-visible history. Fails
+        closed — with no service binding or bearer configured the request is
+        refused with 503 rather than silently passing content through
+        unmapped. Content is capped at 5 MiB of decoded text.
+      tags: [Evidence]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_tool, format, content]
+              properties:
+                source_tool: { type: string }
+                format: { type: string, enum: [csv, json] }
+                target_kind: { type: string, enum: [control, obligation, evidence_item, ai_system], default: control }
+                content: { type: string, description: Raw export text (max 5 MiB) }
+                column_map: { type: object, description: Optional source-column to canonical-field overrides }
+                defaults: { type: object, description: Optional default field values applied to every mapped row }
+      responses:
+        "200": { description: "Import summary (rows, mapped, errors) plus the mapped kye.connector.evidence_import.v1 batch" }
+        "400": { description: "invalid_json, source_tool_required, invalid_format, invalid_target_kind or content_required" }
+        "413": { description: content_too_large — over the 5 MiB cap }
+        "502": { description: mapping_failed or import_service_unreachable — the mapping engine errored }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Delegations (§17 authority chain) ───────────────────────────────────────
+  /delegations:
+    get:
+      operationId: app-get-delegations
+      summary: List active and revoked delegations
+      description: >
+        Authority flows actor to principal to subject under a scope with an
+        expiry; attenuations are separate rows referencing a parent_id. State
+        is derived lazily — revoked when revoked_at is set, expired when past
+        expires_at, otherwise active.
+      tags: [Delegations]
+      responses:
+        "200": { description: "Delegation rows with derived state (active / expired / revoked)" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-delegations
+      summary: Create a new delegation
+      description: >
+        Issues a delegation with a TTL (default 365 days, max 730). When
+        attenuating via parent_id, the parent must exist and belong to the
+        caller's tenant.
+      tags: [Delegations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [actor, principal, subject, scope]
+              properties:
+                actor: { type: string, maxLength: 200 }
+                principal: { type: string, maxLength: 200 }
+                subject: { type: string, maxLength: 200 }
+                scope: { type: string, maxLength: 400 }
+                parent_id: { type: string, maxLength: 200, description: Parent delegation to attenuate }
+                ttl_days: { type: integer, minimum: 1, maximum: 730, default: 365 }
+      responses:
+        "201": { description: Created delegation with expires_at }
+        "400": { description: invalid_json or missing_fields }
+        "404": { description: parent_not_found — attenuation parent missing or not owned by this tenant }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /delegations/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: app-delete-delegations-by-id
+      summary: Revoke a delegation (soft-delete)
+      description: Sets revoked_at / revoked_by and flips state to revoked; an optional reason is recorded.
+      tags: [Delegations]
+      parameters:
+        - { name: reason, in: query, schema: { type: string, maxLength: 400 }, description: Optional revocation reason }
+      responses:
+        "200": { description: "Revoked — returns id and revoked_at" }
+        "404": { description: not_found_or_already_revoked }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Meaning-continuity drift events (§18) ───────────────────────────────────
+  /drift-events:
+    get:
+      operationId: app-get-drift-events
+      summary: List drift events with open/closed counts
+      description: >
+        The runtime opens drift events automatically; humans close them.
+        Optional state filter; counts power the tab badges.
+      tags: [DriftEvents]
+      parameters:
+        - { name: state, in: query, schema: { type: string, enum: [open, closed] }, description: Absent returns both }
+      responses:
+        "200": { description: "Event rows (type, actor, severity, opened, closed, resolution) plus open/closed counts" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-drift-events
+      summary: Open a new drift event
+      description: >
+        Records a meaning-continuity drift marker. Unrecognised types default
+        to meaning_broken and unrecognised severities to P2.
+      tags: [DriftEvents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type: { type: string, enum: [meaning_broken, obligation_unmet, scope_overflow], default: meaning_broken }
+                severity: { type: string, enum: [P0, P1, P2], default: P2 }
+                actor: { type: string, maxLength: 200 }
+                detail: { type: string, maxLength: 1000 }
+      responses:
+        "201": { description: Opened event with its id and opened timestamp }
+        "400": { description: invalid_json }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /drift-events/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    patch:
+      operationId: app-patch-drift-events-by-id
+      summary: Close (resolve) a drift event
+      description: >
+        Marks the event closed with a resolution; unrecognised or absent
+        resolutions default to remediated. The resolver identity is recorded.
+      tags: [DriftEvents]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resolution: { type: string, enum: [reconfirmed, revoked, remediated], default: remediated }
+      responses:
+        "200": { description: "Closed — returns id, closed timestamp, resolution, resolved_by" }
+        "404": { description: not_found_or_already_closed }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Authority maps (decision ↔ evidence bijection · refusal clustering) ─────
+  /evidence-coverage:
+    get:
+      operationId: app-get-evidence-coverage
+      summary: Decision-to-Evidence-Pack coverage for the caller's tenant
+      description: >
+        Joins the tenant's decision ledger to its sealed-pack index on
+        decision_id and reports coverage as covered / decisions, plus the full
+        list of decisions that resolve to no pack. Breakdowns are returned per
+        verdict, per capability and per day. `dimensions` reports how many rows
+        actually carry each decision axis, so an axis the ledger does not record
+        reads as unrecorded rather than as an empty finding. Tenant scoping is
+        applied in SQL on both sides of the join.
+      tags: [Evidence]
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time }, description: Window start (omit for the whole ledger) }
+        - { name: until, in: query, schema: { type: string, format: date-time }, description: Window end (omit for the whole ledger) }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }, description: Maximum uncovered decisions returned }
+      responses:
+        "200": { description: "Coverage totals, per-verdict / per-capability / per-day breakdowns, axis-recording health, and the uncovered-decision list" }
+        "400": { description: "Invalid since/until, or since not before until" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /refusal-map:
+    get:
+      operationId: app-get-refusal-map
+      summary: Refusal clusters for the caller's tenant
+      description: >
+        Returns only the non-allow decisions (deny, reject, revoke, quarantine,
+        require_approval, require_human_review) for the caller's tenant,
+        clustered by reason_code x capability x actor_entity_id and ranked on
+        each axis separately. Each cluster reports how many of its refusals
+        resolve to an Evidence Pack. `dimensions` reports the real recording
+        coverage of each axis over the refused set — reason_code is null on
+        historical rows and populates from newer decisions forward, and a null
+        is never inferred or defaulted. Tenant scoping is applied in SQL.
+      tags: [Decisions]
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time }, description: Window start (omit for the whole ledger) }
+        - { name: until, in: query, schema: { type: string, format: date-time }, description: Window end (omit for the whole ledger) }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }, description: Maximum clusters returned }
+      responses:
+        "200": { description: "Refusal totals, per-axis rankings, axis-recording health, and the reason_code x capability x actor clusters" }
+        "400": { description: "Invalid since/until, or since not before until" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /purpose-least-privilege:
+    get:
+      operationId: app-get-purpose-least-privilege
+      summary: Declared-vs-exercised purpose drift for the caller's tenant
+      description: >
+        Answers the least-privilege question no single existing surface answers:
+        of the purposes this tenant declared and granted, how many were ever
+        actually exercised? Joins the purpose registry and the grant ledger to
+        the per-decision purpose attribution on the evidence-pack index, and
+        classifies every declared purpose as exercised, unexercised, or
+        not_observable. Purpose attribution only exists on decisions sealed
+        after the decision writer began recording it, so the response reports
+        attributed and unattributed decision counts separately and a purpose
+        whose whole life predates the attributed window is reported as
+        not_observable — never as unused, which would be a fabricated finding.
+        Tenant scoping is applied in SQL on every statement.
+      tags: [Purposes]
+      parameters:
+        - { name: window_days, in: query, schema: { type: integer, minimum: 1, maximum: 730, default: 90 }, description: "Observation window in days; out-of-range values are clamped, non-numeric falls back to the default" }
+      responses:
+        "200": { description: "Per-purpose findings (exercised / unexercised / not_observable), finding counts, the honest attributed and unattributed decision denominators, the observation window, unexercised live grants, and a compliance attestation" }
+        "401": { description: "No session, or the session resolves to no tenant" }
+        "403": { description: "A client-supplied tenant_id did not match the session-resolved tenant (§0.11 cross-tenant refusal)" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Evidence Packs ──────────────────────────────────────────────────────────
+  /evidence-packs:
+    get:
+      operationId: app-get-evidence-packs
+      summary: List evidence packs for the caller's tenant
+      description: >
+        Evidence Packs are signed audit-ready envelopes for each governed
+        action window. This is the console-level registry view; sealing and
+        signing mechanics live in the runtime.
+      tags: [Evidence]
+      responses:
+        "200": { description: "Pack rows (window, actions, sealed_at, status, sha256, compilation_seal, size_bytes, signers)" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-evidence-packs
+      summary: Create a new draft evidence pack
+      description: >
+        Opens a draft pack for the chosen window (default daily) with zero
+        actions and no signers.
+      tags: [Evidence]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                window: { type: string, enum: [daily, weekly, quarterly], default: daily }
+      responses:
+        "201": { description: Created draft pack }
+        "400": { description: invalid_json }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /evidence-packs/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: app-get-evidence-packs-by-id
+      summary: Fetch a single evidence pack
+      tags: [Evidence]
+      responses:
+        "200": { description: The pack row with parsed signers array }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-evidence-packs-by-id
+      summary: Attest a pack (append signer)
+      description: >
+        Appends the caller as a signer; the pack advances from
+        awaiting_signoff to attested once three signers have signed. Each
+        caller may sign only once.
+      tags: [Evidence]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: { type: string, enum: [attest], default: attest }
+      responses:
+        "200": { description: Updated signers list and status }
+        "400": { description: unsupported_action }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: already_signed_by_caller }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Directory listings ──────────────────────────────────────────────────────
+  /my-listings:
+    get:
+      operationId: app-get-my-listings
+      summary: List the tenant's directory listings with KPI roll-up
+      description: >
+        Listings are the tenant's public-facing entries in the KYE Directory —
+        rule packs, agents, connectors, assurance cards — each requiring
+        moderation before becoming visible. KPI counts published, in-review
+        and draft listings plus removals in the last 90 days.
+      tags: [Listings]
+      responses:
+        "200": { description: "Listing rows (listing_id, listing_type, title, status, views_30d) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-my-listings
+      summary: Create a new directory listing (starts as draft)
+      description: >
+        Mints a kye:listing URN. A new listing starts as draft — it must be
+        submitted and pass moderation before becoming visible; view counts
+        start at zero.
+      tags: [Listings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [listing_type, title]
+              properties:
+                listing_type: { type: string, enum: [rule_pack, agent, connector, assurance_card] }
+                title: { type: string, maxLength: 120 }
+      responses:
+        "201": { description: Created draft listing }
+        "400": { description: "invalid_json, invalid_listing_type, title_required or title_too_long" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Partners ────────────────────────────────────────────────────────────────
+  /partners:
+    get:
+      operationId: app-get-partners
+      summary: List partners under tenant authority
+      tags: [Partners]
+      responses:
+        "200": { description: "Partner rows (name, class, assurance tier, status, since, onboarded_by)" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-partners
+      summary: Onboard a new partner
+      description: >
+        Registers a third-party partner under the tenant's authority.
+        Unrecognised assurance values default to Tier 3 and unrecognised
+        statuses to active.
+      tags: [Partners]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, class]
+              properties:
+                name: { type: string, maxLength: 200 }
+                class: { type: string, maxLength: 120 }
+                assurance: { type: string, enum: [Tier 1, Tier 2, Tier 3], default: Tier 3 }
+                status: { type: string, enum: [active, suspended, off-boarded], default: active }
+      responses:
+        "201": { description: Onboarded partner with its minted id }
+        "400": { description: invalid_json or missing_fields }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Plugins ─────────────────────────────────────────────────────────────────
+  /plugins:
+    get:
+      operationId: app-get-plugins
+      summary: List the tenant's installed plugins with KPI roll-up
+      description: >
+        Plugins are tenant-side extensions of the protocol — PDP rule packs,
+        conformance probes, custom obligations, SDK shims. KPI counts enabled,
+        failing and update-available plugins.
+      tags: [Plugins]
+      responses:
+        "200": { description: "Plugin rows (plugin_id, kind, display_name, version, state, health, invocations_24h, update_available) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-plugins
+      summary: Install a plugin
+      description: >
+        Mints a kye:plugin URN. A freshly installed plugin is disabled until
+        the tenant enables it in the decision flow — honest initial state.
+        Version must be semver-shaped.
+      tags: [Plugins]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, display_name]
+              properties:
+                kind: { type: string, enum: [rule_pack, conformance_probe, obligation, sdk_shim] }
+                display_name: { type: string }
+                version: { type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+", default: 0.1.0 }
+      responses:
+        "201": { description: Installed plugin in disabled state }
+        "400": { description: "invalid_json, invalid_kind, display_name_required or invalid_version" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Purpose Permission ledger (§12 / §17) ───────────────────────────────────
+  /purpose-permissions:
+    get:
+      operationId: app-get-purpose-permissions
+      summary: List Purpose Permission grants for the caller's tenant
+      description: >
+        Every action under a KYE-governed agent must cite an issued Purpose
+        Permission. Status is derived per row — revoked, pending_reconfirm
+        (past expiry), expiring (within 30 days) or active.
+      tags: [PurposePermissions]
+      responses:
+        "200": { description: "Grant rows (grantee, purpose, scope, expires, derived status, issued/revoked/reconfirmed audit fields)" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-purpose-permissions
+      summary: Issue a new Purpose Permission
+      description: >
+        Issues an active grant with a TTL (default 90 days, max 365). The
+        issuer identity is recorded from the session.
+      tags: [PurposePermissions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grantee, purpose, scope]
+              properties:
+                grantee: { type: string, maxLength: 200 }
+                purpose: { type: string, maxLength: 120 }
+                scope: { type: string, maxLength: 400 }
+                ttl_days: { type: integer, minimum: 1, maximum: 365, default: 90 }
+      responses:
+        "201": { description: Issued grant with expires timestamp }
+        "400": { description: invalid_json or missing_fields }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /purpose-permissions/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    patch:
+      operationId: app-patch-purpose-permissions-by-id
+      summary: Reconfirm a Purpose Permission (extend expiry)
+      description: >
+        Extends the grant by ttl_days (default 90, max 365) from now, records
+        last_reconfirmed_at and resets status to active. Revoked grants cannot
+        be reconfirmed.
+      tags: [PurposePermissions]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttl_days: { type: integer, minimum: 1, maximum: 365, default: 90 }
+      responses:
+        "200": { description: "New expires, last_reconfirmed_at and reconfirmed_by" }
+        "404": { description: not_found_or_revoked }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      operationId: app-delete-purpose-permissions-by-id
+      summary: Revoke a Purpose Permission (soft-delete)
+      description: Sets revoked_at / revoked_by and flips status to revoked; an optional reason is recorded.
+      tags: [PurposePermissions]
+      parameters:
+        - { name: reason, in: query, schema: { type: string, maxLength: 400 }, description: Optional revocation reason }
+      responses:
+        "200": { description: "Revoked — returns id and revoked_at" }
+        "404": { description: not_found_or_already_revoked }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Replay Proof runs (§13) ─────────────────────────────────────────────────
+  /replay:
+    get:
+      operationId: app-get-replay
+      summary: List the tenant's replay runs with KPI roll-up
+      description: >
+        Replay runs reference an evidence_pack_id and are signed via
+        kye.replay.proof.v1; divergence opens a Resilience Loop ticket
+        automatically. KPI reports replays in the last 24h, overall match
+        rate, divergences in the last 30 days and signature failures.
+      tags: [Replay]
+      responses:
+        "200": { description: "Run rows (replay_id, evidence_pack_id, decision_id, verdict, signature_ok, requested/completed timestamps) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-replay
+      summary: Queue a new replay of an evidence pack
+      description: >
+        Queues a run in the pending verdict — only the Replay Engine may
+        resolve it to verified, diverged or signature_failed. Signature status
+        is unknown (false) until the engine runs.
+      tags: [Replay]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [evidence_pack_id]
+              properties:
+                evidence_pack_id: { type: string }
+                decision_id: { type: string, description: Optional single decision to replay }
+      responses:
+        "201": { description: Queued run in pending verdict }
+        "400": { description: invalid_json or evidence_pack_id_required }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Risk assessments ────────────────────────────────────────────────────────
+  /risk:
+    get:
+      operationId: app-get-risk
+      summary: List the tenant's risk assessments with KPI roll-up
+      description: >
+        Assessments are tenant-scoped, audit-chained and
+        framework-floor-governed. KPI counts prohibited verdicts in the last
+        24h plus high, limited and minimal tiers across the latest 500
+        assessments.
+      tags: [Risk]
+      responses:
+        "200": { description: "Assessment rows (assessment_id, subject_id, subject_class, tier, score, reason_codes, framework_floor, effective_at) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-risk
+      summary: Register a new risk assessment for a subject
+      description: >
+        Records the assessment exactly as submitted — no fabricated scores or
+        tier upgrades. Score is an integer 0-100.
+      tags: [Risk]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject_id, subject_class]
+              properties:
+                subject_id: { type: string }
+                subject_class:
+                  type: string
+                  enum: [decision, agent, capability, scenario, operating_model, deal, rule_pack, connector]
+                tier:
+                  type: string
+                  enum: [minimal, limited, high, unacceptable, prohibited]
+                  default: minimal
+                score: { type: integer, minimum: 0, maximum: 100, default: 0 }
+                reason_codes:
+                  type: array
+                  items: { type: string }
+                framework_floor:
+                  type: string
+                  enum: [eu_ai_act, dora, gdpr, nist_ai_rmf, iso_42001, fca_opres, pci_dss, sox, none]
+                  default: none
+      responses:
+        "201": { description: Recorded assessment with its minted assessment_id }
+        "400": { description: "invalid_json, subject_id_required, invalid_subject_class, invalid_tier, score_must_be_0_to_100 or invalid_framework_floor" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Scopes (§12 Purpose & Scope Rail) ───────────────────────────────────────
+  /scopes:
+    get:
+      operationId: app-get-scopes
+      summary: List the tenant's declared scopes with KPI roll-up
+      description: >
+        Scopes are capability + dataset + jurisdiction triples bounding what
+        an agent may do within a granted purpose. KPI counts active scopes,
+        scopes bound to at least one purpose, total datasets and distinct
+        jurisdictions.
+      tags: [Scopes]
+      responses:
+        "200": { description: "Scope rows (scope_id, capability, datasets, jurisdiction, bound_purposes, status) plus kpi" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-scopes
+      summary: Declare a new scope
+      description: >
+        Mints a kye:scope URN. A freshly declared scope starts active with
+        zero purpose bindings — bindings are created through the Purpose
+        Permission rail. Datasets accept an array or comma-separated string.
+      tags: [Scopes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capability]
+              properties:
+                capability:
+                  type: string
+                  enum: [read, write, delete, verify, attest, audit, delegate]
+                jurisdiction: { type: string, enum: [GB, EU, US, SG, AU], default: GB }
+                datasets:
+                  oneOf:
+                    - type: array
+                      items: { type: string }
+                    - type: string
+                      description: Comma-separated dataset list
+      responses:
+        "201": { description: Declared scope with zero purpose bindings }
+        "400": { description: "invalid_json, invalid_capability or invalid_jurisdiction" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── State machine assignments ───────────────────────────────────────────────
+  /state-machine-assignment:
+    get:
+      operationId: app-get-state-machine-assignment
+      summary: List the tenant's state machine assignments with KPI roll-up
+      description: >
+        An assignment binds a tenant state machine to a specific entity and
+        tracks its current state. KPI counts assignments, distinct bound
+        entities, transitions in the last 24h and assignments with no
+        transition in 30 days (stuck); includes distinct entity classes for
+        the filter bar.
+      tags: [StateMachines]
+      responses:
+        "200": { description: "Assignment rows (assignment_id, state_machine_id, entity_id, entity_class, current_state, state_since, last_transition_at, transitions_24h) plus kpi and entity_classes" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-state-machine-assignment
+      summary: Assign a state machine to an entity
+      description: >
+        Verifies the referenced state machine exists and belongs to the
+        caller's tenant, then creates the assignment in the given initial
+        state (default pending) with zero transitions.
+      tags: [StateMachines]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state_machine_id, entity_id, entity_class]
+              properties:
+                state_machine_id: { type: string }
+                entity_id: { type: string }
+                entity_class: { type: string, description: Lowercased; non-alphanumerics become underscores }
+                initial_state: { type: string, default: pending }
+      responses:
+        "201": { description: Created assignment in its initial state }
+        "400": { description: "invalid_json, state_machine_id_required, entity_id_required or entity_class_required" }
+        "404": { description: state_machine_not_found_or_not_owned }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Stripe (§27 commercial lifecycle) ───────────────────────────────────────
+  /stripe/checkout-session:
+    post:
+      operationId: app-post-stripe-checkout-session
+      summary: Create a Stripe Checkout Session for the tenant's subscription
+      description: >
+        Creates a subscription-mode Checkout Session via the Stripe REST API,
+        stamping the tenant id into client_reference_id and metadata, and
+        persists a checkout intent so the webhook can correlate
+        checkout.session.completed back to the tenant. The client redirects to
+        the returned url.
+      tags: [Stripe]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [price_id]
+              properties:
+                price_id: { type: string, pattern: "^price_", description: Stripe Price id }
+                success_path: { type: string, description: Return path on success (default /billing.html?checkout=ok) }
+                cancel_path: { type: string, description: Return path on cancel (default /billing.html?checkout=cancel) }
+      responses:
+        "200": { description: "session_id, hosted checkout url and expires_at" }
+        "400": { description: invalid_json or bad_price_id }
+        "502": { description: stripe_error — Stripe API rejected the request }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /stripe/invoices:
+    get:
+      operationId: app-get-stripe-invoices
+      summary: List invoices for the caller's tenant
+      description: >
+        Reads the canonical invoices table in the kye_grants store (binding
+        KYE_GRANTS_DB), populated by the commercial-lifecycle worker's Stripe
+        projection. Hosted Stripe invoice URLs are passed straight through.
+      tags: [Stripe]
+      responses:
+        "200": { description: "Invoice rows with totals, status, hosted URL and billing period (latest 100)" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /stripe/portal-session:
+    post:
+      operationId: app-post-stripe-portal-session
+      summary: Create a Stripe Customer Portal session
+      description: >
+        Looks up the tenant's stripe_customer_id from its most recent
+        non-cancelled subscription in the kye_grants store, then creates a
+        Billing Portal session returning to /billing.html.
+      tags: [Stripe]
+      responses:
+        "200": { description: Portal url for the caller's Stripe customer }
+        "404": { description: no_active_subscription — create one via /stripe/checkout-session first }
+        "502": { description: stripe_error — Stripe API rejected the request }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Usage + metering (§23) ──────────────────────────────────────────────────
+  /usage:
+    get:
+      operationId: app-get-usage
+      summary: Usage and billing aggregates for the caller's tenant
+      description: >
+        Month-to-date decision count, evidence packs created, AI cost and
+        token totals, a 4-week weekly decision sparkline, and a 30-day meter
+        summary grouped by meter class. Honest zeros when tables are empty.
+      tags: [Usage]
+      responses:
+        "200": { description: "decisions_month, evidence_packs_month, ai_cost_month, ai_tokens_month, weekly_decisions, meters" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── White-label branding ────────────────────────────────────────────────────
+  /white-label-config:
+    get:
+      operationId: app-get-white-label-config
+      summary: Read the active white-label config for the caller's tenant
+      description: >
+        Resolves the brand config through the tenant's active consultant link,
+        preferring a tenant-specific row over the consultant-wide default.
+        Read-only.
+      tags: [WhiteLabel]
+      responses:
+        "200": { description: "Brand config (brand_name, colours, logo_url, domain, support_email, legal_footer)" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { description: No active white-label config applies to this tenant }
+        "503": { description: db_binding_missing or white-label tables not provisioned }
+
+  # ── Widgets (§9 — embeds with licence + revocation) ─────────────────────────
+  /widgets:
+    get:
+      operationId: app-get-widgets
+      summary: List deployed widgets for the caller's tenant
+      description: >
+        Each widget carries its own licence and revocation path; the embed CDN
+        returns 410 once a widget is revoked.
+      tags: [Widgets]
+      responses:
+        "200": { description: "Widget rows (kind, host, pages, licence, status, installed, views_30d, revoked_at)" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-widgets
+      summary: Generate a new widget embed
+      description: >
+        Mints a kye:widget URN with a fresh 24-character embed key and returns
+        the ready-to-paste embed snippet pointing at the widget CDN.
+      tags: [Widgets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: { type: string, maxLength: 120 }
+                host: { type: string, maxLength: 200, description: Optional host the embed is installed on }
+                licence: { type: string, enum: [commercial, evaluation, open], default: commercial }
+      responses:
+        "201": { description: "Created widget with embed_key and embed_snippet" }
+        "400": { description: invalid_json or missing_kind }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /widgets/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: app-delete-widgets-by-id
+      summary: Revoke a widget (soft-delete)
+      description: Flips status to revoked and sets revoked_at; the embed CDN then serves 410 for this widget.
+      tags: [Widgets]
+      responses:
+        "200": { description: "Revoked — returns id and revoked_at" }
+        "404": { description: not_found_or_already_revoked }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-widgets-by-id
+      summary: Rotate a widget's embed key
+      description: >
+        Issues a fresh 24-character embed key for an unrevoked widget. The
+        only supported action is rotate.
+      tags: [Widgets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [rotate] }
+      responses:
+        "200": { description: New embed_key for the widget }
+        "400": { description: unsupported_action }
+        "404": { description: not_found_or_revoked }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }

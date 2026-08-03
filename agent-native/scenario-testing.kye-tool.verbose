@@ -1,0 +1,102 @@
+@kye-tool v1
+@spec scenario-testing.openapi.v1
+@source-sha256 81a576c4d783f689a544d1040d3d1c12bde32088ecda94ea49a18c0200af7bf8
+@compiled-at 2026-05-16T15:19:04Z
+@kid kye:key:agent-tool-signing:dev
+@sig DEV-NOT-FOR-PRODUCTION
+@base https://kye-admin.example
+@auth bearer JWT
+@endpoints 56
+
+GET /api/v1/approval-briefs listApprovalBriefs @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,approver:string?,status:string? -> object
+POST /api/v1/approval-briefs createApprovalBrief @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/approval-briefs/{id} getApprovalBrief @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/approval-briefs/{id} updateApprovalBrief @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/approval-briefs/{id} softDeleteApprovalBrief @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/approval-briefs/{id}/acknowledge acknowledgeApprovalBrief @auth=inherit @purpose=Operate.Read | ∅ -> opaque
+POST /api/v1/approval-briefs/{id}/viewed markApprovalBriefViewed @auth=inherit @purpose=Operate.Read | ∅ -> opaque
+GET /api/v1/approval-decisions listApprovalDecisions @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,approver:string?,decision:string?,since:string? -> object
+POST /api/v1/approval-decisions createApprovalDecision @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/approval-decisions/{id} getApprovalDecision @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/approval-decisions/{id} updateApprovalDecision @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/approval-decisions/{id} softDeleteApprovalDecision @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/approval-decisions/{id}/expire expireApprovalDecision @auth=inherit @purpose=Operate.Read | ∅ -> opaque
+POST /api/v1/approval-decisions/{id}/revoke revokeApprovalDecision @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+GET /api/v1/approval-evidence-packs listApprovalEvidencePacks @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,approval_brief_id:string? -> object
+POST /api/v1/approval-evidence-packs createApprovalEvidencePack @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/approval-evidence-packs/{id} getApprovalEvidencePack @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/approval-evidence-packs/{id} updateApprovalEvidencePack @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/approval-evidence-packs/{id} softDeleteApprovalEvidencePack @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+GET /api/v1/approval-evidence-packs/{id}/export exportApprovalEvidencePack @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/approval-evidence-packs/{id}/verify verifyApprovalEvidencePack @auth=inherit @purpose=Operate.Read | ∅ -> object
+GET /api/v1/approver-knowledge-snapshots listApproverKnowledgeSnapshots @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,approver:string? -> object
+POST /api/v1/approver-knowledge-snapshots createApproverKnowledgeSnapshot @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/approver-knowledge-snapshots/{id} getApproverKnowledgeSnapshot @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/approver-knowledge-snapshots/{id} updateApproverKnowledgeSnapshot @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/approver-knowledge-snapshots/{id} softDeleteApproverKnowledgeSnapshot @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/approver-knowledge-snapshots/{id}/verify verifyApproverKnowledgeSnapshot @auth=inherit @purpose=Operate.Read | ∅ -> object
+GET /api/v1/consequence-maps listConsequenceMaps @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,scenario_run_id:string? -> object
+POST /api/v1/consequence-maps createConsequenceMap @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/consequence-maps/{id} getConsequenceMap @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/consequence-maps/{id} updateConsequenceMap @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/consequence-maps/{id} softDeleteConsequenceMap @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/consequence-maps/{id}/verify verifyConsequenceMap @auth=inherit @purpose=Operate.Read | ∅ -> object
+GET /api/v1/scenario-runs listScenarioRuns @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,scenario_id:string?,run_mode:string?,since:string? -> object
+POST /api/v1/scenario-runs createScenarioRun @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/scenario-runs/{id} getScenarioRun @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/scenario-runs/{id} updateScenarioRun @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/scenario-runs/{id} softDeleteScenarioRun @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/scenario-runs/{id}/generate-evidence generateEvidenceFromRun @auth=inherit @purpose=Operate.Read | Idempotency-Key:string? -> object
+POST /api/v1/scenario-runs/{id}/rerun rerunScenarioRun @auth=inherit @purpose=Operate.Read | Idempotency-Key:string? -> object
+GET /api/v1/scenarios listScenarios @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,run_mode:string?,status:string?,q:string? -> object
+POST /api/v1/scenarios createScenario @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/scenarios/{id} getScenario @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/scenarios/{id} updateScenario @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/scenarios/{id} softDeleteScenario @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+GET /api/v1/stress-tests listStressTests @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,status:string? -> object
+POST /api/v1/stress-tests createStressTest @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/stress-tests/{id} getStressTest @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/stress-tests/{id} updateStressTest @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/stress-tests/{id} softDeleteStressTest @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/stress-tests/{id}/rerun rerunStressTest @auth=inherit @purpose=Operate.Read | Idempotency-Key:string? -> object
+GET /api/v1/stressors listStressors @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,category:string? -> object
+POST /api/v1/stressors createStressor @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/stressors/{id} getStressor @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/stressors/{id} updateStressor @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/stressors/{id} softDeleteStressor @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+
+@hint listApprovalBriefs List approval briefs
+@hint createApprovalBrief Create an approval brief (admin)
+@hint acknowledgeApprovalBrief Approver acknowledges the brief (idempotent)
+@hint markApprovalBriefViewed Mark a brief as viewed (idempotent)
+@hint listApprovalDecisions List approval decisions
+@hint createApprovalDecision Record an approval decision (admin)
+@hint expireApprovalDecision Mark an approval decision expired (idempotent)
+@hint revokeApprovalDecision Revoke an approval decision
+@hint listApprovalEvidencePacks List approval evidence packs
+@hint createApprovalEvidencePack Create an approval evidence pack (admin)
+@hint exportApprovalEvidencePack Download a self-contained JSON bundle of the evidence pack
+@hint listApproverKnowledgeSnapshots List approver knowledge snapshots (admin)
+@hint createApproverKnowledgeSnapshot Create an approver knowledge snapshot (admin)
+@hint listConsequenceMaps List consequence maps (admin)
+@hint createConsequenceMap Create a consequence map (admin)
+@hint verifyConsequenceMap Verify the signature on a consequence map (admin)
+@hint listScenarioRuns List scenario runs
+@hint createScenarioRun Queue a scenario run (admin)
+@hint getScenarioRun Fetch a scenario run
+@hint updateScenarioRun Update a scenario run outcome (admin / runner)
+@hint softDeleteScenarioRun Soft-delete a scenario run (admin)
+@hint generateEvidenceFromRun Create an approval evidence pack from a scenario run (admin)
+@hint rerunScenarioRun Replay a scenario run (admin)
+@hint listScenarios List scenarios
+@hint createScenario Create a scenario (admin)
+@hint getScenario Fetch a scenario
+@hint updateScenario Update a scenario (admin)
+@hint softDeleteScenario Soft-delete a scenario (admin)
+@hint listStressTests List stress tests (admin)
+@hint createStressTest Create a stress test (admin)
+@hint rerunStressTest Execute a stress test (admin)
+@hint listStressors List stressor library entries (admin)
+@hint createStressor Create a stressor library entry (admin)
+
+@end

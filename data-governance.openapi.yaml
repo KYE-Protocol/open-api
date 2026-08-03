@@ -1,0 +1,283 @@
+openapi: 3.1.0
+info:
+  title: KYE Data Governance Pack™ API
+  version: 1.0.0
+  description: |
+    Public API for the KYE Data Governance Pack™ (constitution §31).
+    Customers register `kye.data_use_manifest.v1` and `kye.data_asset.v1`
+    records via these endpoints; the records are then loaded by the
+    `data_use` PDP stage at decision-time and by the
+    `kye-dsar-evidence-agent` at DSAR-assembly time.
+
+    Persistence: writes flow through the gateway to the D1 tables created
+    by migration `021_data_governance_pack.sql`:
+      - `data_use_manifests`
+      - `data_assets`
+      - `data_access_events` (append-only, written by the data_use stage —
+        NOT exposed by these endpoints)
+
+    Audit chain: every successful registration emits a canonical event
+    (`data_use_manifest.registered`, `data_use_manifest.revoked`,
+    `data_asset.registered`).
+
+    Base path: `/v1/`
+
+servers:
+  - url: https://gateway.kyeprotocol.com
+    description: KYE Reference Gateway™ (production)
+  - url: http://127.0.0.1:8787
+    description: Local reference implementation
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: data-use-manifests
+    description: kye.data_use_manifest.v1 lifecycle — register, list, read, revoke
+  - name: data-assets
+    description: kye.data_asset.v1 registry — register, list, read
+
+paths:
+
+  /v1/data-use-manifests:
+    post:
+      operationId: registerDataUseManifest
+      tags: [data-use-manifests]
+      summary: Register a data_use_manifest
+      description: |
+        Registers a `kye.data_use_manifest.v1` record. The manifest declares
+        what data the named subject (an agent / service / role / user) may
+        touch, for what purpose, under what restrictions, and for how long.
+        The PDP's data_use stage loads the active manifest at decision-time
+        and binds the requested action against it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataUseManifest'
+      responses:
+        '201':
+          description: Manifest registered
+        '400':
+          description: Missing required field
+        '401':
+          description: Unauthorised
+    get:
+      operationId: listDataUseManifests
+      tags: [data-use-manifests]
+      summary: List data_use_manifests
+      parameters:
+        - in: query
+          name: tenant_id
+          schema: { type: string }
+        - in: query
+          name: subject
+          schema: { type: string }
+        - in: query
+          name: active
+          schema: { type: boolean }
+          description: When true, filter to manifests where not_before ≤ now ≤ not_after AND revoked_at is unset.
+      responses:
+        '200':
+          description: List of manifests with count
+
+  /v1/data-use-manifests/{manifest_id}:
+    get:
+      operationId: readDataUseManifest
+      tags: [data-use-manifests]
+      summary: Read a single data_use_manifest
+      parameters:
+        - in: path
+          name: manifest_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Manifest record
+        '404':
+          description: Manifest not found
+
+  /v1/data-use-manifests/{manifest_id}/revoke:
+    post:
+      operationId: revokeDataUseManifest
+      tags: [data-use-manifests]
+      summary: Revoke a data_use_manifest
+      description: |
+        Sets `revoked_at = now()`. Subsequent decisions against this
+        manifest deny with reason code `manifest_revoked`.
+        Idempotent — a second revoke returns 200 with `note: already_revoked`.
+      parameters:
+        - in: path
+          name: manifest_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Manifest revoked (or already revoked)
+        '404':
+          description: Manifest not found
+
+  /v1/data-assets:
+    post:
+      operationId: registerDataAsset
+      tags: [data-assets]
+      summary: Register a data_asset
+      description: |
+        Registers a `kye.data_asset.v1` record. The asset describes a
+        data location (DB table / object-store path / API endpoint /
+        CKAN dataset / message-bus topic / vector store collection /
+        file / stream) and its classification, per-field PII inventory,
+        retention default, and lineage parents.
+
+        **Invariant:** when `classification ∈ {personal_data,
+        special_category_data}`, `data_subject_ref_field` is REQUIRED —
+        so the DSAR agent can join evidence rows back to a subject.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataAsset'
+      responses:
+        '201':
+          description: Asset registered
+        '400':
+          description: |
+            Missing required field — code:
+            `missing_required_field` OR
+            `data_subject_ref_field_required_for_personal_data`
+    get:
+      operationId: listDataAssets
+      tags: [data-assets]
+      summary: List data_assets
+      parameters:
+        - in: query
+          name: tenant_id
+          schema: { type: string }
+        - in: query
+          name: classification
+          schema: { type: string }
+        - in: query
+          name: owner
+          schema: { type: string }
+      responses:
+        '200':
+          description: List of assets with count
+
+  /v1/data-assets/{asset_id}:
+    get:
+      operationId: readDataAsset
+      tags: [data-assets]
+      summary: Read a single data_asset
+      parameters:
+        - in: path
+          name: asset_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Asset record
+        '404':
+          description: Asset not found
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  schemas:
+    DataUseManifest:
+      type: object
+      description: |
+        Mirror of `kye.data_use_manifest.v1`. The canonical schema with full
+        validators is published at
+        `https://kyeprotocol.com/schemas/kye.data_use_manifest.v1.json`.
+        This inline shape documents the required fields the gateway
+        registration handler enforces.
+      required:
+        - manifest_id
+        - issuer
+        - subject
+        - purposes
+        - permitted_actions
+        - asset_selectors
+        - not_before
+        - issued_at
+        - signature
+      properties:
+        manifest_id:        { type: string }
+        tenant_id:          { type: string }
+        issuer:             { type: string }
+        subject:            { type: string }
+        purposes:           { type: array, items: { type: string }, minItems: 1 }
+        permitted_actions:  { type: array, items: { type: string }, minItems: 1 }
+        asset_selectors:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [selector_type, selector]
+            properties:
+              selector_type: { type: string, enum: [asset_urn, asset_urn_prefix, classification, label] }
+              selector:      { type: string }
+        permitted_classifications: { type: array, items: { type: string } }
+        permitted_jurisdictions:   { type: array, items: { type: string } }
+        transfer_safeguards:       { type: array, items: { type: string } }
+        retention:
+          type: object
+          properties:
+            max_age_days:          { type: integer }
+            post_retention_action: { type: string, enum: [delete, anonymise, review] }
+        data_subject_basis:        { type: string }
+        special_category_basis:    { type: string }
+        issued_at:                 { type: string, format: date-time }
+        not_before:                { type: string, format: date-time }
+        not_after:                 { type: string, format: date-time }
+        signature:
+          type: object
+          required: [alg, kid, value_b64]
+          properties:
+            alg:       { type: string, enum: [Ed25519] }
+            kid:       { type: string }
+            value_b64: { type: string }
+    DataAsset:
+      type: object
+      description: |
+        Mirror of `kye.data_asset.v1`. The canonical schema with full
+        validators is published at
+        `https://kyeprotocol.com/schemas/kye.data_asset.v1.json`.
+      required:
+        - asset_id
+        - owner
+        - asset_kind
+        - location
+        - classification
+      properties:
+        asset_id:       { type: string }
+        tenant_id:      { type: string }
+        owner:          { type: string }
+        asset_kind:     { type: string, enum: [db_table, object_store_path, api_endpoint, ckan_dataset, message_topic, vector_collection, file, stream] }
+        location:
+          type: object
+          required: [system, address]
+          properties:
+            system:       { type: string }
+            address:      { type: string }
+            jurisdiction: { type: string }
+        classification: { type: string }
+        pii_inventory:
+          type: array
+          items:
+            type: object
+            required: [field, pii_type]
+            properties:
+              field:              { type: string }
+              pii_type:           { type: string }
+              nullable:           { type: boolean }
+              redaction_strategy: { type: string, enum: [full, partial_mask, tokenise, drop, preserve_only_for_subject] }
+        labels:                 { type: object, additionalProperties: { type: string } }
+        default_retention_days: { type: integer }
+        data_subject_ref_field: { type: string }
+        lineage_parents:        { type: array, items: { type: string } }

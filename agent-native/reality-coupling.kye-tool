@@ -1,0 +1,37 @@
+@kye-tool v1
+@spec reality-coupling.openapi.v1
+@source-sha256 6515e75e0ac5057c98c5f9457bf4a2e92465d4495aec289bfb4d8b1557aedc7c
+@compiled-at 2026-05-16T15:19:04Z
+@kid kye:key:agent-tool-signing:dev
+@sig DEV-NOT-FOR-PRODUCTION
+@base https://kye-admin.example
+@auth bearer JWT
+@endpoints 25
+
+GET /api/v1/reality-anchors listRealityAnchors @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,anchor_type:string?,status:string?,q:string? -> object
+POST /api/v1/reality-anchors createRealityAnchor @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/reality-anchors/{id} getRealityAnchor @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+PATCH /api/v1/reality-anchors/{id} updateRealityAnchor @auth=inherit @purpose=Operate.Update | body:Body -> object
+DELETE /api/v1/reality-anchors/{id} softDeleteRealityAnchor @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/reality-anchors/{id}/deprecate deprecateRealityAnchor @auth=inherit @purpose=Operate.Read | Idempotency-Key:string?; body:Body -> object
+POST /api/v1/reality-anchors/{id}/verify verifyRealityAnchor @auth=inherit @purpose=Operate.Read | Idempotency-Key:string? -> object
+GET /api/v1/reality-coupling-checks listRealityCouplingChecks @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,action_id:string?,coupling_result:string?,since:string? -> object
+POST /api/v1/reality-coupling-checks createRealityCouplingCheck @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/reality-coupling-checks/{id} getRealityCouplingCheck @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+DELETE /api/v1/reality-coupling-checks/{id} softDeleteRealityCouplingCheck @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/reality-coupling-checks/{id}/check rerunRealityCouplingCheck @auth=inherit @purpose=Operate.Read | Idempotency-Key:string? -> object
+POST /api/v1/reality-coupling-checks/{id}/decide decideRealityCouplingCheck @auth=inherit @purpose=Operate.Decide | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/reality-snapshots listRealitySnapshots @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,anchor_id:string?,is_stale:string?,since:string? -> object
+POST /api/v1/reality-snapshots createRealitySnapshot @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/reality-snapshots/{id} getRealitySnapshot @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+DELETE /api/v1/reality-snapshots/{id} softDeleteRealitySnapshot @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/reality-snapshots/{id}/verify verifyRealitySnapshot @auth=inherit @purpose=Operate.Read | Idempotency-Key:string? -> object
+GET /api/v1/stable-drift-events listStableDriftEvents @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,status:string?,severity:string?,drift_type:string?,since:string? -> object
+POST /api/v1/stable-drift-events createStableDriftEvent @auth=inherit @purpose=Operate.Create | Idempotency-Key:string?; body:Body -> object
+GET /api/v1/stable-drift-events/{id} getStableDriftEvent @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+DELETE /api/v1/stable-drift-events/{id} softDeleteStableDriftEvent @auth=inherit @purpose=Operate.Read @idempotent | ∅ -> object
+POST /api/v1/stable-drift-events/{id}/acknowledge acknowledgeStableDriftEvent @auth=inherit @purpose=Operate.Read | Idempotency-Key:string?; body:Body -> object
+POST /api/v1/stable-drift-events/{id}/quarantine quarantineStableDriftEvent @auth=inherit @purpose=Operate.Read | Idempotency-Key:string?; body:Body -> object
+POST /api/v1/stable-drift-events/{id}/resolve resolveStableDriftEvent @auth=inherit @purpose=Operate.Read | Idempotency-Key:string?; body:Body -> object
+
+@end

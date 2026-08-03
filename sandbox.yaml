@@ -1,0 +1,106 @@
+openapi: "3.1.0"
+info:
+  title: KYE Protocol™ Sandbox API
+  version: "1.0.0"
+  description: |
+    Public sandbox surface for sandbox.kyeprotocol.com (Cloudflare
+    Pages Functions). No authentication — this is the try-before-signup
+    playground. Every endpoint is a THIN demo adapter over the ONE
+    canonical engine behind the authenticated production surface (§0:
+    zero sandbox-local decision logic), runs against a fixed demo
+    tenant (kye:tenant:sandbox-demo), persists nothing, and marks every
+    response `demo: true`. The production Authority API is
+    POST https://app.kyeprotocol.com/api/v1/runtime/evaluate
+    (app-post-runtime-evaluate — the app-surface projection of the Core
+    wire-contract op evaluateRuntime).
+
+servers:
+  - url: https://sandbox.kyeprotocol.com
+    description: Production sandbox surface
+
+# The sandbox is intentionally unauthenticated — public playground.
+security: []
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [ok, demo, error, evidence]
+      properties:
+        ok: { type: boolean, enum: [false] }
+        demo: { type: boolean, enum: [true] }
+        error: { type: string }
+        evidence: { $ref: "#/components/schemas/PublicEvidence" }
+
+    PublicEvidence:
+      type: object
+      description: >-
+        §0.35 patent-safe evidence reference — built ONLY by the
+        canonical publicEvidence() helper (opaque id, outcome, reason
+        code, public verify link; never an internal path or URN).
+      required: [kind, id, outcome, reason, verify_url]
+      properties:
+        kind: { type: string, enum: [audit_reference] }
+        id: { type: string }
+        outcome: { type: string }
+        reason: { type: string }
+        verify_url: { type: string, format: uri }
+
+paths:
+  /api/v1/pdp/decide:
+    post:
+      operationId: sandbox-post-pdp-decide
+      summary: Demo three-outcome authority decision (public playground)
+      description: >-
+        Evaluates one agent action through the SAME deterministic
+        three-outcome decision engine as the authenticated Authority
+        API (allow | require_approval | deny; reason codes from
+        public/vocabulary/reason-codes.md). Fixed demo tenant, nothing
+        persisted, deterministic decision_id per input, sealed
+        Evidence Pack included so visitors can verify it offline.
+      tags: [Playground]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subject, action, purpose]
+              properties:
+                subject:
+                  type: string
+                  description: KYE URN of the acting agent (alias `agent` accepted).
+                action:
+                  type: string
+                  description: Dotted lowercase capability id, e.g. payments.transfer.
+                purpose:
+                  type: string
+                context:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Demo decision + patent-safe evidence + sealed Evidence Pack
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, demo, decision, reason_code, decision_id, replay_seed, decided_at, evidence]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  demo: { type: boolean, enum: [true] }
+                  decision: { type: string, enum: [allow, require_approval, deny] }
+                  reason_code: { type: string }
+                  decision_id: { type: string }
+                  replay_seed: { type: string }
+                  decided_at: { type: string, format: date-time }
+                  evidence: { $ref: "#/components/schemas/PublicEvidence" }
+                  evidence_pack:
+                    type: object
+                    description: Ed25519-sealed, offline-verifiable Evidence Pack (same shape as the production Authority API).
+                  note: { type: string }
+        "400":
+          description: invalid_json | missing_subject | subject_not_kye_urn | missing_action | action_malformed | missing_purpose
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }

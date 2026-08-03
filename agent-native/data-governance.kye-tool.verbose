@@ -1,0 +1,27 @@
+@kye-tool v1
+@spec data-governance.openapi.v1
+@source-sha256 562ba3a400fbb7032eef2af25c72d673b240435f4e83ac427243704c905c0179
+@compiled-at 2026-05-16T15:19:04Z
+@kid kye:key:agent-tool-signing:dev
+@sig DEV-NOT-FOR-PRODUCTION
+@base https://gateway.kyeprotocol.com
+@auth bearer opaque
+@endpoints 7
+
+GET /v1/data-assets listDataAssets @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,classification:string?,owner:string? -> opaque
+POST /v1/data-assets registerDataAsset @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+GET /v1/data-assets/{asset_id} readDataAsset @auth=inherit @purpose=Operate.Read @idempotent | asset_id:string -> opaque
+GET /v1/data-use-manifests listDataUseManifests @auth=inherit @purpose=Operate.Read @idempotent | tenant_id:string?,subject:string?,active:boolean? -> opaque
+POST /v1/data-use-manifests registerDataUseManifest @auth=inherit @purpose=Operate.Read | body:Body -> opaque
+GET /v1/data-use-manifests/{manifest_id} readDataUseManifest @auth=inherit @purpose=Operate.Read @idempotent | manifest_id:string -> opaque
+POST /v1/data-use-manifests/{manifest_id}/revoke revokeDataUseManifest @auth=inherit @purpose=Operate.Read | manifest_id:string -> opaque
+
+@hint listDataAssets List data_assets
+@hint registerDataAsset Register a data_asset
+@hint readDataAsset Read a single data_asset
+@hint listDataUseManifests List data_use_manifests
+@hint registerDataUseManifest Register a data_use_manifest
+@hint readDataUseManifest Read a single data_use_manifest
+@hint revokeDataUseManifest Revoke a data_use_manifest
+
+@end

@@ -1,0 +1,386 @@
+openapi: "3.1.0"
+info:
+  title: KYE Protocol™ Status API
+  version: "1.0.0"
+  description: |
+    Public status surface for status.kyeprotocol.com (Cloudflare Pages
+    Functions). No authentication — this is the status page everyone
+    checks when something is down. Per constitution §35 STREAMING-LOGS
+    the incident data is written event-driven by the runtime (the
+    kye-incident-detector Worker when a §13 Resilience Loop drift
+    event crosses a severity threshold), never hand-edited; these
+    endpoints read the canonical D1 tables and serve cached JSON /
+    RSS views.
+
+servers:
+  - url: https://status.kyeprotocol.com
+    description: Production status surface
+
+# The status surface is intentionally unauthenticated — it must stay
+# readable when everything else is down.
+security: []
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: { type: boolean, enum: [false] }
+        error: { type: string }
+        hint: { type: string }
+        message: { type: string }
+
+    StatusComponent:
+      type: object
+      required: [id, name, group, status, checked_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        group: { type: string, enum: [runtime, control_plane, messaging, edge, data, billing] }
+        status:
+          type: string
+          enum: [operational, maintenance, degraded_performance, partial_outage, major_outage]
+        checked_at: { type: string, format: date-time }
+        latency_p50_ms: { type: number }
+        latency_p95_ms: { type: number }
+        uptime_30d: { type: number }
+        message: { type: string }
+
+    ActiveIncident:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        status: { type: string }
+        severity: { type: string }
+        opened_at: { type: string, format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        components_affected:
+          type: array
+          items: { type: string }
+        path: { type: [string, "null"] }
+
+    Incident:
+      type: object
+      properties:
+        incident_id: { type: string }
+        component_id: { type: string }
+        severity: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        impact: { type: [string, "null"] }
+        started_at: { type: string, format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        resolution_summary: { type: [string, "null"] }
+        source_event: { type: [string, "null"] }
+        workflow_run_id: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+paths:
+  # ── Component health ────────────────────────────────────────────────────────
+  /api/components:
+    get:
+      operationId: status-get-api-components
+      summary: Aggregated component-status report
+      description: >-
+        Returns a kye.status.report.v1 payload aggregated from the
+        canonical component inventory, recent health rows in D1
+        (kye_status_components), and unresolved incidents
+        (kye_status_incidents). Overall status is the worst-case of
+        all components. Served through a 60-second KV cache to
+        prevent thundering-herd polling; the x-cache response header
+        reports HIT or MISS. CORS-open (Access-Control-Allow-Origin:
+        *) so any surface can embed the status widget.
+      tags: [Status]
+      responses:
+        "200":
+          description: Status report (cached up to 60s)
+          headers:
+            x-cache:
+              description: KV cache result for this request (HIT or MISS)
+              schema: { type: string, enum: [HIT, MISS] }
+            access-control-allow-origin:
+              description: Always * — the report is public
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema_version, generated_at, overall_status, summary, components, active_incidents]
+                properties:
+                  schema_version: { type: string, enum: [kye.status.report.v1] }
+                  generated_at: { type: string, format: date-time }
+                  overall_status:
+                    type: string
+                    enum: [operational, maintenance, degraded_performance, partial_outage, major_outage]
+                  summary: { type: string }
+                  components:
+                    type: array
+                    items: { $ref: "#/components/schemas/StatusComponent" }
+                  active_incidents:
+                    type: array
+                    items: { $ref: "#/components/schemas/ActiveIncident" }
+                  next_maintenance: { type: [object, "null"] }
+
+  # ── Incidents ───────────────────────────────────────────────────────────────
+  /api/incidents:
+    get:
+      operationId: status-get-api-incidents
+      summary: Live incident list
+      description: >-
+        Reads the canonical incidents D1 table (event-driven writes
+        per §35 — never hand-edited) and returns a filterable JSON
+        list, newest first, with a 15-second edge cache.
+      tags: [Status]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+        - name: since
+          in: query
+          schema: { type: string, format: date-time }
+          description: Only incidents with started_at >= this ISO timestamp
+        - name: component
+          in: query
+          schema: { type: string }
+          description: Filter by component_id
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [investigating, identified, monitoring, resolved]
+          description: Filter by incident severity state
+      responses:
+        "200":
+          description: Incident list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, count, incidents]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  count: { type: integer }
+                  incidents:
+                    type: array
+                    items: { $ref: "#/components/schemas/Incident" }
+        "500":
+          description: query_failed — the D1 read raised
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: db_binding_missing — KYE_DB not bound on the Pages project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /feed.xml:
+    get:
+      operationId: status-get-feed-xml
+      summary: RSS 2.0 incident feed
+      description: >-
+        RSS 2.0 feed of the 50 most recent incidents, regenerated on
+        each request from the live incidents D1 table with a
+        60-second edge cache. Per §35, downstream consumers (RSS
+        readers, status aggregators, on-call channels) subscribe to
+        this feed instead of polling the HTML page. If the D1 read
+        fails the endpoint emits an empty but valid feed rather than
+        a 5xx — status RSS is critical infrastructure.
+      tags: [Status]
+      responses:
+        "200":
+          description: RSS 2.0 XML document
+          content:
+            application/rss+xml:
+              schema:
+                type: string
+                description: RSS 2.0 channel with one item per incident (title, link, guid, pubDate, category, CDATA description)
+
+  # ── Notification subscriptions ──────────────────────────────────────────────
+  /api/subscribe:
+    get:
+      operationId: status-get-api-subscribe
+      summary: Describe the subscribe contract
+      description: >-
+        Self-describing helper — returns the expected POST body shape
+        for /api/subscribe (field names, requiredness, semantics) so
+        the form and third-party integrators can introspect the
+        contract without reading source.
+      tags: [Subscriptions]
+      responses:
+        "200":
+          description: Machine-readable description of the POST contract
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, endpoint, method, body_schema]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  endpoint: { type: string }
+                  method: { type: string, enum: [POST] }
+                  body_schema:
+                    type: object
+                    description: Field-by-field description of the POST body
+    post:
+      operationId: status-post-api-subscribe
+      summary: Subscribe to incident + maintenance notifications
+      description: >-
+        Stores a subscription row in D1 (status_subscriptions,
+        migration 013) and sends a confirmation email through the
+        canonical §38 Comms Engine template
+        status.subscribe.confirmation.v1. Idempotent — an email that
+        is already subscribed returns the existing subscription id
+        with already_subscribed: true instead of creating a
+        duplicate. Spam controls: a honeypot field (website) silently
+        accepts and ignores bot submissions, and submissions are
+        rate-limited to 5 per day-salted IP hash per 24h window.
+      tags: [Subscriptions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, accept]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 320
+                accept:
+                  type: boolean
+                  description: Must be true — privacy + transactional-email acceptance
+                components:
+                  type: array
+                  maxItems: 32
+                  items: { type: string, maxLength: 64 }
+                  description: Optional component-id filter; empty or missing = all components
+                consent_marketing:
+                  type: boolean
+                  description: Opts into the quarterly status digest
+      responses:
+        "200":
+          description: Subscribed (or already subscribed — idempotent)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  id: { type: string, description: "kye:status-sub:<uuid>" }
+                  status: { type: string, enum: [confirmed] }
+                  already_subscribed: { type: boolean }
+                  message: { type: string }
+        "400":
+          description: invalid_body, invalid_email, or terms_not_accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "429":
+          description: rate_limited — more than 5 subscriptions from the same IP hash in 24h
+          headers:
+            retry-after:
+              description: Seconds until the rate-limit window resets
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  error: { type: string, enum: [rate_limited] }
+                  retry_after_seconds: { type: integer }
+        "500":
+          description: handler_exception — unexpected failure (message included, truncated to 500 chars)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: not_provisioned — KYE_DB unbound or migration 013_status_subscriptions.sql not applied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    options:
+      operationId: status-options-subscribe
+      summary: CORS preflight
+      description: >-
+        CORS preflight for the subscribe form. Allows origin
+        https://status.kyeprotocol.com with methods GET, POST,
+        OPTIONS and the content-type request header; preflight result
+        cacheable for 86400 seconds.
+      tags: [Subscriptions]
+      responses:
+        "204":
+          description: Preflight accepted (no body)
+          headers:
+            access-control-allow-origin:
+              schema: { type: string, enum: ["https://status.kyeprotocol.com"] }
+            access-control-allow-methods:
+              schema: { type: string, enum: ["GET, POST, OPTIONS"] }
+            access-control-allow-headers:
+              schema: { type: string, enum: [content-type] }
+            access-control-max-age:
+              schema: { type: string, enum: ["86400"] }
+
+  /api/status/unsubscribe:
+    get:
+      operationId: status-get-api-status-unsubscribe
+      summary: One-click unsubscribe
+      description: >-
+        One-click unsubscribe for status notifications, linked from
+        every status.subscribe.confirmation.v1 email (RFC 8058
+        spirit — GET by design, since the link is clicked straight
+        from an email client and the id token is an unguessable
+        kye:status-sub:<uuid>). Idempotent: re-hitting an
+        already-unsubscribed token returns ok: true with already:
+        true. The suppression is recorded to the audit chain
+        (event_family internal.status.unsubscribe) when
+        AUDIT_CHAIN_BASE_URL is configured; emission failures are
+        logged loudly, never swallowed.
+      tags: [Subscriptions]
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^kye:status-sub:[0-9a-f-]{36}$"
+          description: Subscription id token from the email's unsubscribe link
+      responses:
+        "200":
+          description: Unsubscribed (idempotent)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, status, event_id]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  status: { type: string, enum: [unsubscribed] }
+                  already: { type: boolean }
+                  event_id: { type: string, description: "kye:status-unsub:<uuid> audit reference" }
+        "400":
+          description: missing_token — id absent or not a kye:status-sub:<uuid>
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: unknown_token — no live subscription with that id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: handler_exception — unexpected failure
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: not_provisioned — KYE_DB unbound or migration 013_status_subscriptions.sql not applied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }

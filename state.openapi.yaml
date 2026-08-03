@@ -1,0 +1,345 @@
+openapi: 3.1.0
+info:
+  title: KYE Protocol™ State API — State Machines + Events + Registry
+  version: 3.0.0
+  description: |
+    Endpoints for creating and managing declarative state machines, firing state
+    transition events, querying the State Registry, and listing state transitions.
+
+servers:
+  - url: https://kye.example
+    description: Reference KYE deployment
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: state-machines
+  - name: state-events
+  - name: state-registry
+  - name: state-transitions
+
+paths:
+  /api/v1/state-machines:
+    get:
+      tags: [state-machines]
+      operationId: state.listStateMachines
+      summary: List state machines visible to the authenticated tenant
+      parameters:
+        - name: tenant_id
+          in: query
+          schema: { type: string }
+        - name: entity_class
+          in: query
+          schema: { type: string }
+        - name: scope
+          in: query
+          schema: { type: string, enum: [platform, tenant] }
+      responses:
+        '200':
+          description: List of state machines
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StateMachine' }
+    post:
+      tags: [state-machines]
+      operationId: state.createStateMachine
+      summary: Create a tenant-scoped state machine (or extension)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StateMachineCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StateMachine' }
+
+  /api/v1/state-machines/from-library:
+    post:
+      tags: [state-machines]
+      operationId: adoptStateLibraryEntry
+      summary: Derive a tenant state machine from a State Library entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdoptLibraryRequest' }
+      responses:
+        '201':
+          description: Derived machine created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StateMachine' }
+
+  /api/v1/state-machines/{machine_id}:
+    parameters:
+      - name: machine_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [state-machines]
+      operationId: getStateMachine
+      summary: Get a state machine by ID
+      responses:
+        '200':
+          description: State machine
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StateMachine' }
+        '404': { description: Not found }
+
+  /api/v1/state-events:
+    get:
+      tags: [state-events]
+      operationId: state.listStateEvents
+      summary: List state events (append-only log)
+      parameters:
+        - name: entity_id
+          in: query
+          schema: { type: string }
+        - name: machine_id
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: List of state events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StateEvent' }
+    post:
+      tags: [state-events]
+      operationId: fireStateEvent
+      summary: Fire a state transition event for an entity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FireStateEventRequest' }
+      responses:
+        '201':
+          description: Event fired and recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StateEvent' }
+        '422':
+          description: Transition not permitted by machine
+
+  /api/v1/state-registry/{tenant_id}:
+    parameters:
+      - name: tenant_id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [state-registry]
+      operationId: getStateRegistry
+      summary: Get the State Registry summary for a tenant
+      responses:
+        '200':
+          description: Registry envelope
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StateRegistry' }
+
+  /api/v1/state-transitions:
+    get:
+      tags: [state-transitions]
+      operationId: listStateTransitions
+      summary: List declared state transitions for a machine
+      parameters:
+        - name: machine_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Transitions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StateTransition' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    StateDef:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [initial, intermediate, terminal, error] }
+        obligations: { type: array, items: { type: string } }
+        description: { type: ["string", "null"] }
+
+    StateMachine:
+      type: object
+      required: [machine_id, entity_class, states, created_by, created_at]
+      properties:
+        schema_version: { type: string, enum: [kye.state.machine.v1] }
+        machine_id: { type: string }
+        entity_class: { type: string }
+        tenant_scope: { type: ["string", "null"] }
+        states:
+          type: array
+          items: { $ref: '#/components/schemas/StateDef' }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        locked_at: { type: ["string", "null"], format: date-time }
+
+    StateMachineCreate:
+      type: object
+      required: [entity_class, states]
+      properties:
+        entity_class: { type: string }
+        tenant_scope: { type: string }
+        states:
+          type: array
+          items: { $ref: '#/components/schemas/StateDef' }
+
+    AdoptLibraryRequest:
+      type: object
+      required: [library_id, tenant_id]
+      properties:
+        library_id: { type: string, description: 'kye:state-library:<sector>.<name>.v<n>' }
+        tenant_id: { type: string }
+        tightened_guards:
+          type: array
+          items:
+            type: object
+            properties:
+              transition_from: { type: string }
+              transition_to: { type: string }
+              additional_guards: { type: array, items: { type: object } }
+        added_states:
+          type: array
+          items: { $ref: '#/components/schemas/StateDef' }
+
+    StateEventSignature:
+      type: object
+      required: [alg, kid, value_b64]
+      properties:
+        alg: { type: string, enum: [EdDSA, ES256] }
+        kid: { type: string }
+        value_b64: { type: string }
+
+    StateEvent:
+      type: object
+      required: [event_id, entity_id, machine_id, from, to, transition_id, decided_at, decided_by, signature]
+      properties:
+        schema_version: { type: string, enum: [kye.state.event.v1] }
+        event_id: { type: string }
+        entity_id: { type: string }
+        machine_id: { type: string }
+        from: { type: string }
+        to: { type: string }
+        transition_id: { type: string }
+        decided_at: { type: string, format: date-time }
+        decided_by: { type: string }
+        evidence_refs: { type: array, items: { type: string } }
+        signature: { $ref: '#/components/schemas/StateEventSignature' }
+        cascade_event_ids: { type: array, items: { type: string } }
+
+    FireStateEventRequest:
+      type: object
+      required: [entity_id, to_state]
+      properties:
+        entity_id: { type: string, description: Any KYE entity URN }
+        to_state: { type: string, description: Target state name }
+        evidence_refs: { type: array, items: { type: string } }
+        decided_by: { type: string }
+
+    RegistryMachineEntry:
+      type: object
+      required: [machine_id, entity_class, scope, states]
+      properties:
+        machine_id: { type: string }
+        entity_class: { type: string }
+        scope: { type: string, enum: [platform, tenant] }
+        locked: { type: boolean }
+        states: { type: array, items: { $ref: '#/components/schemas/StateDef' } }
+
+    StateRegistry:
+      type: object
+      required: [tenant_id, machines]
+      properties:
+        schema_version: { type: string, enum: [kye.state.registry.v1] }
+        tenant_id: { type: string }
+        machines:
+          type: array
+          items: { $ref: '#/components/schemas/RegistryMachineEntry' }
+        member_counts_per_state:
+          type: array
+          items:
+            type: object
+            properties:
+              machine_id: { type: string }
+              entity_class: { type: string }
+              state: { type: string }
+              count: { type: integer, minimum: 0 }
+        as_of: { type: ["string", "null"], format: date-time }
+
+    TransitionGuard:
+      type: object
+      required: [evidence_class, required]
+      properties:
+        evidence_class: { type: string }
+        required: { type: boolean }
+        description: { type: ["string", "null"] }
+
+    StateTransition:
+      type: object
+      required: [transition_id, machine_id, from, to, actor_role_required]
+      properties:
+        schema_version: { type: string, enum: [kye.state.transition.v1] }
+        transition_id: { type: string }
+        machine_id: { type: string }
+        from: { type: string }
+        to: { type: string }
+        guards:
+          type: array
+          items: { $ref: '#/components/schemas/TransitionGuard' }
+        actor_role_required: { type: string, enum: [owner, admin, approver, member, auditor, system] }
+        effects: { type: array, items: { type: object } }

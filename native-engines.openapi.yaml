@@ -1,0 +1,283 @@
+openapi: 3.1.0
+info:
+  title: KYE Protocol™ — Native Engines API
+  version: 1.0.0
+  description: |
+    Public REST surface for the four named sub-engines:
+
+      KYE Data Mapping Agent™  · `/v1/data-flow`
+      KYE Native Search Engine™ · `/v1/search`
+      KYE Memory Engine™ · `/v1/memory`
+      KYE Reporting Engine™ · `/v1/reports`
+
+    Every endpoint returns a signed envelope replayable offline from
+    the per-tenant published signing key alone. The synthesis
+    construction is part of the patent track and is not disclosed in
+    this repository — what is documented here is the observable
+    contract only.
+
+    Base path: `/v1/`.
+    Host: `api.kyeprotocol.com`.
+
+servers:
+  - url: https://api.kyeprotocol.com
+    description: KYE Protocol™ Native Engines
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: search
+    description: KYE Native Search Engine™. Tenant-scoped lexical + semantic substrate; the construction is part of the patent track and is not disclosed in this repository.
+  - name: memory
+    description: KYE Memory Engine™. Tenant-scoped agent memory with policy-bound supersession; the classification taxonomy and supersession rule are part of the patent track and are not disclosed in this repository.
+  - name: data-flow
+    description: KYE Data Mapping Agent™. Signed data-flow graph; the graph construction is part of the patent track and is not disclosed in this repository.
+  - name: reports
+    description: KYE Reporting Engine™. Per-framework signed compliance reports; the report derivation is part of the patent track and is not disclosed in this repository.
+
+paths:
+  /v1/search:
+    post:
+      operationId: nativeEngines.search
+      tags: [search]
+      summary: Run a tenant-scoped query against the native search engine.
+      description: |
+        Returns a signed `kye.search_result.v1` envelope. The construction is part of the patent track and is not disclosed in this repository — only the observable contract (request shape, response envelope, filter inputs) is documented here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [index, q]
+              properties:
+                index:
+                  type: string
+                  enum: [consultants, partners, widgets, oss-packages, evidence-packs, decisions]
+                q:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                classification_floor:
+                  type: string
+                  enum: [public, internal, confidential, restricted, top_secret, special_category]
+                  description: Rows above the caller's floor are silently withheld and counted.
+                risk_tier_max:
+                  type: string
+                  enum: [minimal, limited, high, unacceptable, prohibited]
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 200
+                  default: 20
+                offset:
+                  type: integer
+                  minimum: 0
+                  maximum: 10000
+                  default: 0
+                mode:
+                  type: string
+                  enum: [lexical, semantic, hybrid]
+                  default: lexical
+      responses:
+        '200':
+          description: Signed search result envelope.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: 'Signed kye.search_result.v1 envelope — see https://kyeprotocol.com/schemas/kye.search_result.v1.json for the canonical shape.'
+        '400': { description: Bad request (unknown index / empty query). }
+        '401': { description: Missing bearer token. }
+        '402': { description: Entitlement missing (capability=search.read not in active SKU). }
+        '403': { description: Tenant suspended or key revoked. }
+  /v1/search/runs:
+    get:
+      operationId: nativeEngines.searchRuns
+      tags: [search]
+      summary: List the caller tenant's last 100 search runs (WORM-persisted).
+      responses:
+        '200': { description: search_query_log rows. }
+
+  /v1/memory:
+    post:
+      operationId: nativeEngines.memoryPut
+      tags: [memory]
+      summary: Write a signed agent-memory record.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_entity_id, memory_class, purpose, content]
+              properties:
+                agent_entity_id: { type: string }
+                memory_class:
+                  type: string
+                  enum: [preference, observation, fact, evaluation, recall_hint]
+                purpose:
+                  type: string
+                  description: Declared purpose; cross-purpose recalls are denied at the gate.
+                content: { type: object }
+      responses:
+        '200':
+          description: Signed memory envelope.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: 'Signed kye.agent_memory.v1 envelope — see https://kyeprotocol.com/schemas/kye.agent_memory.v1.json for the canonical shape.'
+    get:
+      operationId: nativeEngines.memoryList
+      tags: [memory]
+      summary: List the caller tenant's non-forgotten memory records.
+      responses:
+        '200': { description: Memory record list. }
+
+  /v1/memory/recall:
+    post:
+      operationId: nativeEngines.memoryRecall
+      tags: [memory]
+      summary: Recall under a declared purpose; cross-purpose reads are denied.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_entity_id, purpose]
+              properties:
+                agent_entity_id: { type: string }
+                purpose: { type: string }
+                limit: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200': { description: Recall envelope. }
+        '403': { description: Cross-purpose recall denied at the gate. }
+
+  /v1/memory/forget:
+    post:
+      operationId: nativeEngines.memoryForget
+      tags: [memory]
+      summary: Tombstone a memory record (WORM-preserved deletion).
+      responses:
+        '200':
+          description: Signed forget envelope.
+          content:
+            application/json:
+              schema:
+                description: kye.agent_memory.forget.v1
+
+  /v1/data-flow:
+    post:
+      operationId: nativeEngines.dataFlowSeal
+      tags: [data-flow]
+      summary: Trigger a fresh signed data-flow graph seal.
+      responses:
+        '200':
+          description: Signed kye.data_flow_graph.v1 envelope.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: 'Signed kye.data_flow_graph.v1 envelope — see https://kyeprotocol.com/schemas/kye.data_flow_graph.v1.json for the canonical shape.'
+    get:
+      operationId: nativeEngines.dataFlowList
+      tags: [data-flow]
+      summary: List recent data-flow seals for the caller tenant.
+      responses:
+        '200': { description: Seal list. }
+
+  /v1/reports:
+    post:
+      operationId: nativeEngines.reportGenerate
+      tags: [reports]
+      summary: Generate a signed per-framework compliance report.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [report_kind, framework, period_start, period_end]
+              properties:
+                report_kind:
+                  type: string
+                  enum: [soc2_type2, iso_27001, iso_42001, eu_ai_act, dora, gdpr, pci_dss, nist_800_207, nist_ai_rmf, fedramp, bcbs_239, sr_11_7]
+                framework: { type: string }
+                period_start: { type: string, format: date-time }
+                period_end:   { type: string, format: date-time }
+      responses:
+        '200':
+          description: Signed kye.report.v1 envelope.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: 'Signed kye.report.v1 envelope — see https://kyeprotocol.com/schemas/kye.report.v1.json for the canonical shape.'
+    get:
+      operationId: nativeEngines.reportList
+      tags: [reports]
+      summary: List the caller tenant's recent reports.
+      responses:
+        '200': { description: Report list with count_this_quarter + frameworks_covered KPIs. }
+
+  /v1/reports/{report_id}:
+    get:
+      operationId: nativeEngines.reportGet
+      tags: [reports]
+      summary: Fetch one signed report envelope by id.
+      parameters:
+        - in: path
+          name: report_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Signed kye.report.v1 envelope.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: 'Signed kye.report.v1 envelope — see https://kyeprotocol.com/schemas/kye.report.v1.json for the canonical shape.'
+
+  /v1/reports/{report_id}/deliver:
+    post:
+      operationId: nativeEngines.reportDeliver
+      tags: [reports]
+      summary: Auto-deliver a report envelope via the `reports@`-routed mail flow.
+      parameters:
+        - in: path
+          name: report_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipients]
+              properties:
+                recipients:
+                  type: array
+                  items: { type: string, format: email }
+                  minItems: 1
+                  maxItems: 10
+      responses:
+        '200':
+          description: Signed kye.report.delivery.v1 receipt.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: tenant-token
+      description: |
+        Per-tenant API key issued by the KYE Cloud™ admin surface.
+        Every request resolves to a tenant_id via the `api_keys` table
+        and an active SKU entitlement that grants the required capability
+        (search.read / memory.read / memory.write / data_flow.seal /
+        report.generate / report.read).
