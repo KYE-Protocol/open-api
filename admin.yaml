@@ -1599,6 +1599,108 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  # ── Ingest (citation-namespace intake) ─────────────────────────────────────
+  /ingest:
+    get:
+      operationId: admin-list-ingest-submissions
+      summary: The citation-namespace intake queue, newest first
+      description: |
+        Lists the 100 most recent `kye.ingest_submission.v1` rows from both
+        intake channels — the console and ingest@kyeprotocol.com — with their
+        lifecycle state: received, queued, acquired, or refused.
+
+        A row is a REQUEST to acquire a source, never a source. `state` is the
+        only honest summary: `acquired` (and only `acquired`) carries a
+        `resolved_source_id`, and that field's presence is the proof the
+        submission went through the canonical acquire path rather than around
+        it. `refused` retains its `refusal_reason` deliberately — a discarded
+        refusal invites the same bad source to be resubmitted next month.
+
+        Owner-only, read-only. Returns an empty list on a cold DB rather than
+        failing.
+      tags: [Ingest]
+      x-kye-source-file: public/admin/functions/api/v1/ingest.js
+      responses:
+        "200":
+          description: Submissions, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submissions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        submission_id: { type: string, pattern: "^kye:ingest:[a-z0-9][a-z0-9-]*$" }
+                        channel: { type: string, enum: [url, upload, email-attachment] }
+                        state: { type: string, enum: [received, queued, acquired, refused] }
+                        submitted_by: { type: string }
+                        url: { type: string, nullable: true }
+                        filename: { type: string, nullable: true }
+                        received_at: { type: string, format: date-time }
+                        resolved_source_id: { type: string, nullable: true }
+                        refusal_reason: { type: string, nullable: true }
+                  note: { type: string, description: "Present only when no database binding exists on the environment" }
+        "401": { description: Unauthenticated }
+    post:
+      operationId: admin-create-ingest-submission
+      summary: Queue a URL or document for acquisition
+      description: |
+        Accepts a URL (`application/json`) or a file (`multipart/form-data`)
+        and records a `kye.ingest_submission.v1`. It does NOT fetch, hash, or
+        verify anything, and it never writes kye:registry:research-sources.
+
+        That restraint is the design. "Verified" means one specific thing — the
+        URL was retrieved, the bytes hashed, and the sentence being quoted is
+        genuinely on the page that came back — and it is implemented once, in
+        the canonical acquire path. A second implementation here would drift
+        from the first and both would keep writing `verified`.
+
+        URLs must be https and are refused for private/loopback hosts. Uploads
+        are hashed at intake, so the bytes acquisition later reads can be shown
+        to be the bytes that arrived. Owner-only.
+      tags: [Ingest]
+      x-kye-source-file: public/admin/functions/api/v1/ingest.js
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri, description: "https only; private and loopback hosts are refused" }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: "25 MB maximum" }
+      responses:
+        "202":
+          description: Queued for acquisition — NOT yet a citable source
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted: { type: boolean }
+                  submission_id: { type: string }
+                  state: { type: string, enum: [queued] }
+                  what_this_means:
+                    type: string
+                    description: |
+                      States plainly that nothing has been fetched or checked and that
+                      acquisition may still refuse it. The wording is part of the
+                      contract: "queued" and "verified" are one step apart in the
+                      pipeline and a world apart in what they license.
+        "400": { description: "url_required, url_rejected, or malformed_request" }
+        "401": { description: Unauthenticated }
+        "413": { description: file_too_large }
+        "415": { description: unsupported_content_type }
+        "500": { description: intake_failed }
   /issuers:
     get:
       operationId: admin-list-authority-issuers
