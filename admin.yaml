@@ -68,17 +68,17 @@ components:
         slug: { type: string }
         name: { type: string }
         env: { type: string, enum: [prod, sandbox] }
-        clerk_org_id: { type: string, nullable: true }
-        owner_email: { type: string, nullable: true }
+        clerk_org_id: { type: [string, "null"] }
+        owner_email: { type: [string, "null"] }
         contract_status: { type: string }
         sla_tier: { type: string }
         region: { type: string }
         state: { type: string }
         created_by: { type: string }
         created_at: { type: string, format: date-time }
-        activated_at: { type: string, format: date-time, nullable: true }
-        deleted_at: { type: string, format: date-time, nullable: true }
-        notes: { type: string, nullable: true }
+        activated_at: { type: [string, "null"], format: date-time }
+        deleted_at: { type: [string, "null"], format: date-time }
+        notes: { type: [string, "null"] }
 
 paths:
   # ── Tenants ────────────────────────────────────────────────────────────────
@@ -1637,11 +1637,11 @@ paths:
                         channel: { type: string, enum: [url, upload, email-attachment] }
                         state: { type: string, enum: [received, queued, acquired, refused] }
                         submitted_by: { type: string }
-                        url: { type: string, nullable: true }
-                        filename: { type: string, nullable: true }
+                        url: { type: [string, "null"] }
+                        filename: { type: [string, "null"] }
                         received_at: { type: string, format: date-time }
-                        resolved_source_id: { type: string, nullable: true }
-                        refusal_reason: { type: string, nullable: true }
+                        resolved_source_id: { type: [string, "null"] }
+                        refusal_reason: { type: [string, "null"] }
                   note: { type: string, description: "Present only when no database binding exists on the environment" }
         "401": { description: Unauthenticated }
     post:

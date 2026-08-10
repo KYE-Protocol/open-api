@@ -388,7 +388,7 @@ paths:
                       type: object
                       required: [period, deal_count, gross_arr_usd, share_pct, payout_usd, status]
                       properties:
-                        period: { type: string, description: Canonical quarter label, e.g. 2026-Q2 }
+                        period: { type: string, description: "Canonical quarter label, e.g. 2026-Q2" }
                         deal_count: { type: integer }
                         gross_arr_usd: { type: number }
                         share_pct: { type: number }

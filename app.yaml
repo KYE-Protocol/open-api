@@ -636,13 +636,13 @@ paths:
               properties:
                 entity_id: { type: string, description: "Canonical entity URN" }
                 entity_type: { type: string }
-                display_name: { type: string, nullable: true }
+                display_name: { type: [string, "null"] }
                 registered_by_entity_id: { type: string, description: "The registering entity's URN" }
                 basis:
                   type: string
                   enum: [self_registration, delegated_registration, bulk_import, agent_nomination_admitted, bootstrap_genesis]
-                delegation_id: { type: string, nullable: true, description: "Required for delegated_registration and bulk_import" }
-                nomination_ref: { type: string, nullable: true, description: "Required for agent_nomination_admitted" }
+                delegation_id: { type: [string, "null"], description: "Required for delegated_registration and bulk_import" }
+                nomination_ref: { type: [string, "null"], description: "Required for agent_nomination_admitted" }
                 consequential_action_classes: { type: array, items: { type: string } }
                 labels: { type: array, items: { type: string } }
                 approval_recorded: { type: boolean, description: "Whether an approval for this admission is on record" }
@@ -1299,7 +1299,7 @@ paths:
                   description: "Optional CIDR/IP allowlist. When set, the verifier rejects a presented key from any source IP outside the list."
       responses:
         "201": { description: "Key metadata (incl. expires_at) plus the one-time plaintext secret, an Authority Finality receipt (patent-safe evidence), and a copy-now warning" }
-        "400": { description: invalid_json, missing_label or invalid_ttl }
+        "400": { description: "invalid_json, missing_label or invalid_ttl" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
   /api-keys/{id}:
