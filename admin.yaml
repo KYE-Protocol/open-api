@@ -4083,7 +4083,7 @@ paths:
         fail silent on a cold DB) with optional filters by tenant_id,
         classification class (public / internal / confidential /
         restricted / top_secret / special_category), detection method,
-        and free-text `q` over asset_id / kid. Returns a KPI block:
+        and free-text `q` over asset_id / classifier_kid. Returns a KPI block:
         total classified, special-category count, low-confidence
         (< 0.7) count, and distinct signing kids. Owner-only, read-only.
         Schema authority: kye.data_classification_assignment.v1.
@@ -4099,7 +4099,7 @@ paths:
           in: query
           required: false
           schema: { type: string, enum: [human_review, regex_scan, llm_inference, gdpr_art9_match, sector_template, schema_inference] }
-        - { name: q, in: query, required: false, schema: { type: string }, description: "LIKE on asset_id / kid" }
+        - { name: q, in: query, required: false, schema: { type: string }, description: "LIKE on asset_id / classifier_kid" }
       responses:
         "200":
           description: Classification assignments + KPI
@@ -4128,9 +4128,8 @@ paths:
                         classification: { type: string }
                         detection_method: { type: string }
                         confidence: { type: number }
-                        kid: { type: string }
+                        classifier_kid: { type: string }
                         effective_at: { type: string, format: date-time }
-                        created_at: { type: string, format: date-time }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
@@ -4927,65 +4926,68 @@ paths:
 
   # ── Reporting Engine™ surface (§14) ───────────────────────────────────────
   /reports:
-    post:
-      operationId: admin-post-reports
-      summary: Create a report envelope for the caller's tenant
+    get:
+      operationId: admin-get-reports
+      summary: List sealed compliance reports for the caller's tenant
       description: |
-        Inserts a `reports` row (table owned by migration
-        024_reports_worm.sql — no runtime DDL) scoped to the Clerk
-        session's tenant. Requires a report_kind (attestation /
-        gap_analysis / incident / periodic), one of the 12 locked
-        framework slugs, and a valid period (`period_end` must not
-        precede `period_start`). The row is sealed immediately with
-        `headline_verdict='partial'` and zeroed control counters — the
-        signed-envelope construction is patent-track and resolved by
-        the Reporting Engine, not this surface. Tenant-scoped via the
+        Returns the tenant's sealed `kye.report.v1` envelopes, most recently
+        sealed first (capped at 200), alongside two derived counters: how many
+        were sealed since the start of the current calendar quarter, and how
+        many distinct frameworks they cover. Tenant-scoped via the Clerk
         session; owner-gated by the middleware.
+
+        Read-only by construction. Sealing a report requires the Ed25519
+        signing seed and the immutable report bucket, and this surface holds
+        neither binding — reports are sealed by the KYE Reporting Engine™ and
+        merely read here. There is deliberately no POST: the one that used to
+        stand here omitted three NOT NULL seal columns and wrote a
+        `headline_verdict` the table's CHECK constraint rejects, so it could
+        never write a row while reporting success to the operator.
+
+        An empty `rows` array means this tenant has no sealed reports, not that
+        the query failed; the SELECTs return `[]` rather than throwing on a
+        cold database.
       tags: [Reports]
       x-kye-source-file: public/admin/functions/api/v1/reports.js
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [report_kind, framework, period_start, period_end]
-              properties:
-                report_kind: { type: string, enum: [attestation, gap_analysis, incident, periodic] }
-                framework:
-                  type: string
-                  enum: [soc2_type_ii, iso_27001, iso_42001, eu_ai_act, dora, gdpr, pci_dss, nist_800_207, nist_ai_rmf, fedramp, bcbs_239, sr_11_7]
-                period_start: { type: string, format: date }
-                period_end: { type: string, format: date }
       responses:
-        "201":
-          description: Report row created and sealed
+        "200":
+          description: Sealed reports for the caller's tenant
           content:
             application/json:
               schema:
                 type: object
+                required: [ok, tenant_id, rows, count_this_quarter, frameworks_covered]
                 properties:
                   ok: { type: boolean, enum: [true] }
-                  report:
-                    type: object
-                    properties:
-                      report_id: { type: string }
-                      tenant_id: { type: string }
-                      report_kind: { type: string }
-                      framework: { type: string }
-                      period_start: { type: string, format: date }
-                      period_end: { type: string, format: date }
-                      headline_verdict: { type: string, enum: [partial] }
-                      sealed_at: { type: string, format: date-time }
-                      signed_by_kid: { type: string }
-                      created_at: { type: string, format: date-time }
-        "400":
-          description: Non-JSON body, invalid report_kind/framework, or bad period
+                  tenant_id: { type: string }
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        report_id: { type: string }
+                        report_kind: { type: string }
+                        framework: { type: string }
+                        period_start: { type: string, format: date }
+                        period_end: { type: string, format: date }
+                        headline_verdict:
+                          type: string
+                          enum: [conformant, qualified, non_conformant, in_progress]
+                        finding_count: { type: integer }
+                        controls_pass: { type: integer }
+                        controls_fail: { type: integer }
+                        controls_exception: { type: integer }
+                        sealed_at: { type: string, format: date-time }
+                        assembler_kid: { type: string }
+                  count_this_quarter: { type: integer }
+                  frameworks_covered: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503":
+          description: KYE_DB binding missing
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
 
   # ── Risk-assessment audit view ────────────────────────────────────────────
   /risk-audit:
