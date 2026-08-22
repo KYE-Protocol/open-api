@@ -2595,6 +2595,92 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /pilot-applications/{id}/commercial-menu:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string }, description: "audit_pilot_applications.id" }
+    post:
+      operationId: admin-send-pilot-commercial-menu
+      summary: Send the commercial menu to a pilot applicant after their scoping call
+      description: |
+        Emails the applicant the SKUs the operator judged to fit that
+        customer's workflow, plus a link to book the follow-up. Dispatches
+        the canonical commercial-menu template through the Comms Engine.
+
+        The operator's selection is the input rather than a SKU id list:
+        the panel already holds the catalogue it selected from, and a Pages
+        Function cannot read the spec tree at runtime to resolve names.
+
+        Pilot SKUs are closed-registration / contact-for-pricing, so the
+        rendered menu carries names and never prices. Idempotency covers the
+        SELECTION, not just the application: re-sending the same set is a
+        duplicate, while offering a different set is a new message.
+      tags: [PilotApplications]
+      x-kye-source-file: public/admin/functions/api/v1/pilot-applications/[id]/commercial-menu.js
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [skus]
+              properties:
+                skus:
+                  type: array
+                  minItems: 1
+                  maxItems: 12
+                  description: The SKUs selected for this customer on the scoping call
+                  items:
+                    type: object
+                    required: [sku_id, name]
+                    properties:
+                      sku_id: { type: string, maxLength: 64 }
+                      name: { type: string, maxLength: 160 }
+            examples:
+              post-scoping-selection:
+                value:
+                  skus:
+                    - { sku_id: "KYE-MOW-SOC-001", name: "KYE Publisher Access Ledger - MOW Search-Only Contract (SOC)" }
+      responses:
+        "200":
+          description: Menu dispatched
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  application_id: { type: string }
+                  template_id: { type: string }
+                  skus:
+                    type: array
+                    items: { type: string }
+        "400":
+          description: No SKUs selected, too many SKUs, or a SKU missing its id or name
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Application not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "422":
+          description: Application has no email address to send to
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "502":
+          description: Comms Engine dispatch failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: Database binding missing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /pilot-applications/{id}/grant:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string }, description: "audit_pilot_applications.id" }
