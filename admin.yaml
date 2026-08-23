@@ -61,6 +61,14 @@ components:
           type: boolean
           enum: [true]
 
+    AdminSeedResult:
+      type: object
+      description: Idempotent library-seed result — what the bundle holds against what D1 holds after the run.
+      required: [ok, bundled_total, db_total]
+      properties:
+        ok: { type: boolean, enum: [true] }
+        bundled_total: { type: integer, description: "Records in the bundled library" }
+        db_total: { type: integer, description: "Records in D1 after seeding" }
     Tenant:
       type: object
       properties:
@@ -5565,6 +5573,440 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
         "503":
           description: KYE_DB missing or verifier unreachable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ── Operations the admin surface serves but had never declared ──────────────
+  # Each of these handlers existed on disk with no operation declared by its OWN
+  # surface. Until the surface-membership arm landed they resolved to the app
+  # surface's operation at the same path, which is what made `auth_required` and
+  # `purpose_check_required` derive from the wrong side of a privilege boundary.
+  # Declared here from each handler's actual behaviour, not from its filename.
+  /_internal/bootstrap-hierarchy:
+    get: &adminBootstrapHierarchy
+      operationId: admin-bootstrap-hierarchy
+      summary: Create the entity-hierarchy tables and indexes if absent (idempotent)
+      description: |
+        Applies the entity-hierarchy DDL and reports what it had to create.
+        Idempotent — tables that already exist are counted, never recreated.
+        Owner-only internal surface; emits `kye.bootstrap.hierarchy.v3`.
+      tags: [Entities]
+      x-kye-source-file: public/admin/functions/api/v1/_internal/bootstrap-hierarchy.js
+      responses:
+        "200":
+          description: Bootstrap result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  schema_version: { type: string }
+                  bootstrapped_at: { type: string, format: date-time }
+                  tables_total: { type: integer }
+                  tables_created: { type: integer }
+                  tables_already_existed: { type: integer }
+                  indexes_created: { type: integer }
+        "503":
+          description: "`db_binding_missing` — KYE_DB is not bound"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    post: *adminBootstrapHierarchy
+  /_internal/seed-agent-library:
+    get: &adminSeedAgentLibrary
+      operationId: admin-seed-agent-library
+      summary: Seed the bundled agent library into D1 (idempotent)
+      description: |
+        Loads the bundled agent-library records and reports the bundled total
+        against what D1 holds afterwards. Owner-only internal surface.
+      tags: [AgentLibrary]
+      x-kye-source-file: public/admin/functions/api/v1/_internal/seed-agent-library.js
+      responses:
+        "200":
+          description: Seed result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSeedResult" }
+        "503":
+          description: "`db_binding_missing` — KYE_DB is not bound"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    post: *adminSeedAgentLibrary
+  /_internal/seed-state-library:
+    get: &adminSeedStateLibrary
+      operationId: admin-seed-state-library
+      summary: Seed the bundled state library into D1 (idempotent)
+      description: |
+        Loads the bundled state-library records and reports the bundled total
+        against what D1 holds afterwards. Owner-only internal surface.
+      tags: [StateLibrary]
+      x-kye-source-file: public/admin/functions/api/v1/_internal/seed-state-library.js
+      responses:
+        "200":
+          description: Seed result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSeedResult" }
+        "503":
+          description: "`db_binding_missing` — KYE_DB is not bound"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    post: *adminSeedStateLibrary
+  /analytics-decisions-per-hour:
+    get:
+      operationId: admin-get-analytics-decisions-per-hour
+      summary: Decision volume bucketed per hour for the calling tenant
+      description: |
+        Window defaults to the last 7 days and is capped at 90 days; longer
+        windows are served by the warehouse path on the gateway worker.
+      tags: [Decisions]
+      x-kye-source-file: public/admin/functions/api/v1/analytics-decisions-per-hour.js
+      parameters:
+        - { name: since, in: query, required: false, schema: { type: string, format: date-time }, description: "Window start (default: until minus 7 days)" }
+        - { name: until, in: query, required: false, schema: { type: string, format: date-time }, description: "Window end (default: now)" }
+      responses:
+        "200":
+          description: Hourly buckets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  tenant_id: { type: string }
+                  since: { type: string, format: date-time }
+                  until: { type: string, format: date-time }
+                  rows: { type: array, items: { type: object } }
+        "400":
+          description: "`invalid_since` · `invalid_until` · `since_must_precede_until` · `window_too_large`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: "`db_binding_missing`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /analytics-widget-calls:
+    get:
+      operationId: admin-get-analytics-widget-calls
+      summary: Per-widget call totals and success counts for the calling tenant
+      tags: [Reports]
+      x-kye-source-file: public/admin/functions/api/v1/analytics-widget-calls.js
+      parameters:
+        - { name: since, in: query, required: false, schema: { type: string, format: date-time }, description: "Window start (default: until minus 7 days)" }
+        - { name: until, in: query, required: false, schema: { type: string, format: date-time }, description: "Window end (default: now)" }
+      responses:
+        "200":
+          description: Per-widget summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  tenant_id: { type: string }
+                  since: { type: string, format: date-time }
+                  until: { type: string, format: date-time }
+                  summary: { type: array, items: { type: object } }
+        "400":
+          description: "`invalid_since` · `invalid_until`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: "`db_binding_missing`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /dashboard-stats:
+    get:
+      operationId: admin-get-dashboard-stats
+      summary: Cross-tenant operator dashboard headline figures
+      description: |
+        Counts are best-effort: a table that does not exist yet contributes 0
+        rather than failing the whole response.
+      tags: [Reports]
+      x-kye-source-file: public/admin/functions/api/v1/dashboard-stats.js
+      responses:
+        "200":
+          description: Headline figures as of the request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  as_of: { type: string, format: date-time }
+                  tenants: { type: object, description: "total / prod / sandbox counts" }
+                  decisions_24h: { type: integer }
+                  revenue_mtd_usd: { type: number }
+                  incidents_open: { type: integer }
+                  per_tenant_today: { type: array, items: { type: object } }
+        "503":
+          description: "`db_binding_missing`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /data-flow-graph:
+    get:
+      operationId: admin-get-data-flow-graph
+      summary: Latest sealed data-flow totals for the calling tenant
+      description: Reads the most recent of up to 200 data-flow seals; the latest seal's totals stand for the current view.
+      tags: [Evidence]
+      x-kye-source-file: public/admin/functions/api/v1/data-flow-graph.js
+      responses:
+        "200":
+          description: Current sealed data-flow view
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  tenant_id: { type: string }
+                  asset_total: { type: integer }
+                  flow_total: { type: integer }
+                  pii_assets: { type: integer }
+        "503":
+          description: "`db_binding_missing`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /entities:
+    get:
+      operationId: admin-get-entities
+      summary: Cross-tenant entity list with type tally
+      tags: [Entities]
+      x-kye-source-file: public/admin/functions/api/v1/entities.js
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string }, description: "Free-text filter" }
+        - { name: type, in: query, required: false, schema: { type: string }, description: "Entity type" }
+        - { name: state, in: query, required: false, schema: { type: string }, description: "Lifecycle state" }
+        - { name: tenant, in: query, required: false, schema: { type: string }, description: "Restrict to one tenant" }
+      responses:
+        "200":
+          description: Matching entities plus a per-type tally
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  total: { type: integer }
+                  by_type: { type: object, additionalProperties: { type: integer } }
+                  entities: { type: array, items: { type: object } }
+        "503":
+          description: "`db_binding_missing`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /events/search:
+    get:
+      operationId: admin-get-events-search
+      summary: Search the governance event stream
+      description: |
+        Echoes the resolved query alongside the rows so a stored result is
+        self-describing. Unlike the other admin reads this returns a bare
+        error object without an `ok` discriminator.
+      tags: [AuditStreams]
+      x-kye-source-file: public/admin/functions/api/v1/events/search.js
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: family, in: query, required: false, schema: { type: string } }
+        - { name: action, in: query, required: false, schema: { type: string } }
+        - { name: phase, in: query, required: false, schema: { type: string } }
+        - { name: actor, in: query, required: false, schema: { type: string } }
+        - { name: risk, in: query, required: false, schema: { type: string } }
+        - { name: since, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: until, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Resolved query, matching rows and the serve time
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query: { type: object, description: "The query as resolved, each unset filter present as null" }
+                  count: { type: integer }
+                  results: { type: array, items: { type: object } }
+                  served_at: { type: string, format: date-time }
+        "401":
+          description: "`unauthorized`"
+          content:
+            application/json:
+              schema: { type: object, properties: { error: { type: string } } }
+        "503":
+          description: "`service_unavailable`"
+          content:
+            application/json:
+              schema: { type: object, properties: { error: { type: string } } }
+  /live-runtime:
+    get:
+      operationId: admin-get-live-runtime
+      summary: Live runtime decision feed with KPI rollup
+      tags: [Assurance]
+      x-kye-source-file: public/admin/functions/api/v1/live-runtime.js
+      parameters:
+        - { name: tenant_id, in: query, required: false, schema: { type: string } }
+        - { name: decision, in: query, required: false, schema: { type: string }, description: "Filter by decision outcome" }
+        - { name: mode, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Feed rows, KPI rollup and the tenants present
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  count: { type: integer }
+                  kpi: { type: object }
+                  tenant_list: { type: array, items: { type: string } }
+        "503":
+          description: "`db_binding_missing`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /memory:
+    get:
+      operationId: admin-get-memory
+      summary: Agent-memory totals for the calling tenant
+      description: Counts governed under §63 Memory Authority — totals only, never memory content.
+      tags: [AgentLibrary]
+      x-kye-source-file: public/admin/functions/api/v1/memory.js
+      responses:
+        "200":
+          description: Memory totals by agent and class
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  tenant_id: { type: string }
+                  total: { type: integer }
+                  agents_count: { type: integer }
+                  classes_count: { type: integer }
+        "503":
+          description: "`db_binding_missing`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /onboarding/workflows:
+    get:
+      operationId: admin-get-onboarding-workflows
+      summary: Onboarding workflows filtered by lifecycle stage
+      tags: [Onboarding]
+      x-kye-source-file: public/admin/functions/api/v1/onboarding/workflows.js
+      parameters:
+        - name: stage
+          in: query
+          required: false
+          description: Lifecycle stage; `any` returns every stage.
+          schema:
+            type: string
+            enum: [applied, triaged, approved, rejected, provisioning, active, any]
+      responses:
+        "200":
+          description: Workflows at the requested stage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  stage: { type: string }
+                  total: { type: integer }
+                  workflows: { type: array, items: { type: object } }
+        "400":
+          description: "`bad_stage` — the response echoes the allowed set in `allowed`"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ErrorResponse"
+                  - type: object
+                    properties:
+                      allowed: { type: array, items: { type: string } }
+        "500":
+          description: "`db_query_failed`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: "`db_binding_missing`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /purposes:
+    get:
+      operationId: admin-get-purposes
+      summary: Declared purposes across tenants, with lawful-basis filter
+      tags: [Policies]
+      x-kye-source-file: public/admin/functions/api/v1/purposes.js
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string }, description: "Free-text filter" }
+        - { name: tenant_id, in: query, required: false, schema: { type: string } }
+        - { name: lawful_basis, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: Matching purposes and the tenants they belong to
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  count: { type: integer }
+                  tenants: { type: array, items: { type: string } }
+                  purposes: { type: array, items: { type: object } }
+        "503":
+          description: "`db_binding_missing`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /search:
+    get:
+      operationId: admin-get-search
+      summary: Operator search across the governed indexes
+      description: |
+        Served by the native search engine when `KYE_SEARCH_ENGINE` is bound,
+        otherwise by a D1 fallback — `source` says which answered. An empty
+        `q` returns no hits rather than every row.
+      tags: [Directory]
+      x-kye-source-file: public/admin/functions/api/v1/search.js
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string }, description: "Search term; empty returns no hits" }
+        - name: index
+          in: query
+          required: false
+          description: Friendly index name; empty searches every relevant index.
+          schema:
+            type: string
+            enum: ["", entities, decisions, library_entries, state_events, policies]
+      responses:
+        "200":
+          description: Hits, with the answering source named
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  tenant_id: { type: string }
+                  q: { type: string }
+                  source: { type: string, description: "Which backend answered, e.g. `d1-fallback`" }
+                  hits: { type: array, items: { type: object } }
+        "503":
+          description: "`db_binding_missing`"
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }

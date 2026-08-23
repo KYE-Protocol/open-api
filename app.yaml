@@ -2469,3 +2469,58 @@ paths:
         "400": { description: unsupported_action }
         "404": { description: not_found_or_revoked }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  # ── Two reads the app surface serves but had never declared ─────────────────
+  # Both resolved to no operation of their own surface, so the manifest derived
+  # their auth and purpose-check requirements from nothing. Declared from the
+  # handlers' actual behaviour.
+  /authorities:
+    get:
+      operationId: app-get-authorities
+      summary: Authorities held by the calling tenant, with issuer rollup
+      tags: [Authority]
+      x-kye-source-file: public/app/functions/api/v1/authorities.js
+      responses:
+        "200":
+          description: Authorities, their issuers and a KPI rollup
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  tenant_id: { type: string }
+                  count: { type: integer }
+                  kpi: { type: object }
+                  issuers: { type: array, items: { type: object } }
+                  authorities: { type: array, items: { type: object } }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /decisions:
+    get:
+      operationId: app-get-decisions
+      summary: Decision records for the calling tenant
+      tags: [Decisions]
+      x-kye-source-file: public/app/functions/api/v1/decisions.js
+      parameters:
+        - { name: since, in: query, required: false, schema: { type: string, format: date-time }, description: "Lower bound on decision time" }
+        - { name: decision, in: query, required: false, schema: { type: string }, description: "Filter by outcome" }
+        - { name: actor, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: Matching decision records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  tenant_id: { type: string }
+                  count: { type: integer }
+                  decisions: { type: array, items: { type: object } }
+        "400":
+          description: "`invalid_since`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
