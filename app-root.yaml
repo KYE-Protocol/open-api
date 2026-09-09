@@ -16,7 +16,10 @@ info:
     Every privileged operation emits a §0.3 evidence-envelope chain
     (kye.purpose.request.v1 → kye.purpose.admissibility.v1 →
     kye.evidence.decision_map.v1 → kye.compliance.attestation.v1, plus
-    kye.engagement.approval.v1 on review decisions). The chain is
+    kye.engagement.approval.v1 on review decisions). The admissibility
+    envelope's `admissible` flag is bound by its contract:
+    True iff every required reason check passed. The engine MUST set this consistently with the reasons array.
+    The chain is
     returned base64-encoded in the x-kye-governance-chain response
     header and persisted append-only to ep_governance_events (WORM
     triggers, migration 035). Tenant isolation per §0.11: every D1
