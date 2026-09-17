@@ -465,7 +465,23 @@ paths:
           application/json:
             schema:
               type: object
-              required: [tenant_id, workspace_id, name]
+              required: [tenant_id, name]
+              properties:
+                tenant_id: { type: string }
+                name: { type: string }
+                workspace_id:
+                  type: [string, "null"]
+                  description: >-
+                    Optional pinning workspace. Null or absent = a project that spans
+                    workspaces; at least one of workspace_id / visible_in_workspaces
+                    must be supplied.
+                visible_in_workspaces:
+                  type: array
+                  items: { type: string }
+                  description: >-
+                    Workspaces permitted to reference this project. Declared reach
+                    only — the acting principal still needs its acts_in row and a
+                    granted_access_to grant.
       responses:
         "201": { description: Created }
 
