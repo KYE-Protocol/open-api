@@ -1,9 +1,10 @@
 @kye-tool v1
 @spec scenario-testing.openapi.v1
 @source-sha256 8756e188ffec2f36f0567d66d1247e54db9fa006b97baae837064c45018ed6a4
-@compiled-at 2026-08-03T14:33:37Z
-@kid kye:key:agent-tool-signing:dev
-@sig DEV-NOT-FOR-PRODUCTION
+@compiled-at 2026-10-02T01:34:35Z
+@kid kye:key:agent-tool-signing:2026Q4
+@sig 0GbXHTL_-OrxHR7Gz-ppoz_kqJcynYePsdWpT0d4SLlM6t6_mkCXkdNIz2gpYuKnKHMHkC4r2mM02qtnSSkpAg
+@seal scenario-testing.kye-tool.seal.json
 @base https://admin.kyeprotocol.com
 @auth bearer JWT
 @endpoints 56

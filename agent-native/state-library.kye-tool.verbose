@@ -1,9 +1,10 @@
 @kye-tool v1
 @spec state-library.openapi.v1
 @source-sha256 e69b7dd2c56c8814f10a1b5b6e0e8923d0be5a0b381ba43a652bdf2d66fce0aa
-@compiled-at 2026-08-03T14:33:37Z
-@kid kye:key:agent-tool-signing:dev
-@sig DEV-NOT-FOR-PRODUCTION
+@compiled-at 2026-10-02T01:34:35Z
+@kid kye:key:agent-tool-signing:2026Q4
+@sig nUsNio-STyIbAP6_1TBmF6sI-KzpQhefCm8E6j1JpNtXTTTmoM_qj8RlnQEKcFDWRFfNmtHa4-vR7sHi7t6fBw
+@seal state-library.kye-tool.verbose.seal.json
 @base https://api.kyeprotocol.com
 @auth bearer token
 @endpoints 2
