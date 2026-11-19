@@ -1,9 +1,10 @@
 @kye-tool v1
 @spec core.openapi.v1
 @source-sha256 a28d5864730723ceb2d210a88235dc21d1949ef711b0a16e207c2c0b56c2e389
-@compiled-at 2026-08-03T14:33:37Z
-@kid kye:key:agent-tool-signing:dev
-@sig DEV-NOT-FOR-PRODUCTION
+@compiled-at 2026-10-02T01:34:35Z
+@kid kye:key:agent-tool-signing:2026Q4
+@sig B-PGqFWNl8nmG579t_7Hl9yCH17GXJBIK2moejVzRM9arjlZ5jXmzgs8xEXzqWV9W8BQ7HHvCdfgh6wPw4YjCg
+@seal core.kye-tool.seal.json
 @base https://api.kyeprotocol.com
 @auth bearer token
 @endpoints 46

@@ -1,118 +1,136 @@
 {
   "schema": "kye.agent_tool.manifest.v1",
-  "compiled_at": "2026-08-03T14:33:37Z",
+  "compiled_at": "2026-10-02T01:34:35Z",
+  "signing_cohort": "kye:signing-cohort:kye-agent-tool-cohort",
+  "signing_scheme": "ed25519_plus_mldsa_hybrid_kofn",
   "packs": [
     {
       "spec": "consultant-programme.openapi.v1",
       "file": "consultant-programme.kye-tool",
       "verbose_file": "consultant-programme.kye-tool.verbose",
+      "seal_file": "consultant-programme.kye-tool.seal.json",
+      "verbose_seal_file": "consultant-programme.kye-tool.verbose.seal.json",
       "source_sha256": "e78b9fad38af2d3da459069e51ecd266bd5d2d49743eb7686f49cc442cb0d5d5",
-      "pack_sha256": "6d494052a3ad613fe831670a4cf963ffe0ef020f87d6ab2970cd18bfbb83b3d1",
+      "pack_sha256": "8babc802edb657f0578f64a8ee82a4ded1f44dc3ae2e8967f3e945cbdc419c8e",
       "bytes": {
         "source_canonical_json": 26935,
-        "pack": 5202,
-        "ratio_pct": 19.31
+        "pack": 5315,
+        "ratio_pct": 19.73
       },
-      "kid": "kye:key:agent-tool-signing:dev",
-      "compiled_at": "2026-08-03T14:33:37Z"
+      "kid": "kye:key:agent-tool-signing:2026Q4",
+      "compiled_at": "2026-10-02T01:34:35Z"
     },
     {
       "spec": "core.openapi.v1",
       "file": "core.kye-tool",
       "verbose_file": "core.kye-tool.verbose",
+      "seal_file": "core.kye-tool.seal.json",
+      "verbose_seal_file": "core.kye-tool.verbose.seal.json",
       "source_sha256": "a28d5864730723ceb2d210a88235dc21d1949ef711b0a16e207c2c0b56c2e389",
-      "pack_sha256": "a916935ee53076bcc89ddc8a637f808be69575005df1edc8dfbcdfb92d1a2824",
+      "pack_sha256": "93acf6150a3b3c08ad7beb0166cc21b20b3d3d07c1471b5d6e805e332a9585e8",
       "bytes": {
         "source_canonical_json": 21403,
-        "pack": 5883,
-        "ratio_pct": 27.49
+        "pack": 5980,
+        "ratio_pct": 27.94
       },
-      "kid": "kye:key:agent-tool-signing:dev",
-      "compiled_at": "2026-08-03T14:33:37Z"
+      "kid": "kye:key:agent-tool-signing:2026Q4",
+      "compiled_at": "2026-10-02T01:34:35Z"
     },
     {
       "spec": "data-governance.openapi.v1",
       "file": "data-governance.kye-tool",
       "verbose_file": "data-governance.kye-tool.verbose",
+      "seal_file": "data-governance.kye-tool.seal.json",
+      "verbose_seal_file": "data-governance.kye-tool.verbose.seal.json",
       "source_sha256": "562ba3a400fbb7032eef2af25c72d673b240435f4e83ac427243704c905c0179",
-      "pack_sha256": "fca44b8a4f1c27a8ee559ded1b93ec3de5b5aab401f0a538ba52df0cd081bda9",
+      "pack_sha256": "135a36bf346736bdde82b5b9b10fec95714146d53564df1311c87a515bc1ad95",
       "bytes": {
         "source_canonical_json": 8179,
-        "pack": 1216,
-        "ratio_pct": 14.87
+        "pack": 1324,
+        "ratio_pct": 16.19
       },
-      "kid": "kye:key:agent-tool-signing:dev",
-      "compiled_at": "2026-08-03T14:33:37Z"
+      "kid": "kye:key:agent-tool-signing:2026Q4",
+      "compiled_at": "2026-10-02T01:34:35Z"
     },
     {
       "spec": "native-engines.openapi.v1",
       "file": "native-engines.kye-tool",
       "verbose_file": "native-engines.kye-tool.verbose",
+      "seal_file": "native-engines.kye-tool.seal.json",
+      "verbose_seal_file": "native-engines.kye-tool.verbose.seal.json",
       "source_sha256": "2a1e5400018109c44f57760147b3db9288b7d7963a50994ea858df23ca9f1fe1",
-      "pack_sha256": "6da06888b88a28efb0d4ea3a436e0499473f8d7a5f2b505381543c1b26637200",
+      "pack_sha256": "8d435361d7941a5c0358d93930fc6b38bdee2cdcf9047b3190ffd779470798a9",
       "bytes": {
         "source_canonical_json": 8751,
-        "pack": 1606,
-        "ratio_pct": 18.35
+        "pack": 1713,
+        "ratio_pct": 19.57
       },
-      "kid": "kye:key:agent-tool-signing:dev",
-      "compiled_at": "2026-08-03T14:33:37Z"
+      "kid": "kye:key:agent-tool-signing:2026Q4",
+      "compiled_at": "2026-10-02T01:34:35Z"
     },
     {
       "spec": "reality-coupling.openapi.v1",
       "file": "reality-coupling.kye-tool",
       "verbose_file": "reality-coupling.kye-tool.verbose",
+      "seal_file": "reality-coupling.kye-tool.seal.json",
+      "verbose_seal_file": "reality-coupling.kye-tool.verbose.seal.json",
       "source_sha256": "92bc9de626f542f022e173992b4ec754114d24a5aef2b46a68c39baefba99e09",
-      "pack_sha256": "17790848a4dd5e3ef2972dcc9d5333ffc7358876b78ca22f8dc362b6ce0625c7",
+      "pack_sha256": "c03ae61eee1a22b7bfe4d3c33052a667872bedac145655673e2556d1208469e4",
       "bytes": {
         "source_canonical_json": 23361,
-        "pack": 3921,
-        "ratio_pct": 16.78
+        "pack": 4030,
+        "ratio_pct": 17.25
       },
-      "kid": "kye:key:agent-tool-signing:dev",
-      "compiled_at": "2026-08-03T14:33:37Z"
+      "kid": "kye:key:agent-tool-signing:2026Q4",
+      "compiled_at": "2026-10-02T01:34:35Z"
     },
     {
       "spec": "scenario-testing.openapi.v1",
       "file": "scenario-testing.kye-tool",
       "verbose_file": "scenario-testing.kye-tool.verbose",
+      "seal_file": "scenario-testing.kye-tool.seal.json",
+      "verbose_seal_file": "scenario-testing.kye-tool.verbose.seal.json",
       "source_sha256": "8756e188ffec2f36f0567d66d1247e54db9fa006b97baae837064c45018ed6a4",
-      "pack_sha256": "2375de152dc385fe06a68ce6c768e897767788b8bab761001ab9b5b1121988c1",
+      "pack_sha256": "d33b266a76f46a3314a5dbb7a34357950709795f743eaa2372b555bd98a522d3",
       "bytes": {
         "source_canonical_json": 38606,
-        "pack": 7561,
-        "ratio_pct": 19.59
+        "pack": 7670,
+        "ratio_pct": 19.87
       },
-      "kid": "kye:key:agent-tool-signing:dev",
-      "compiled_at": "2026-08-03T14:33:37Z"
+      "kid": "kye:key:agent-tool-signing:2026Q4",
+      "compiled_at": "2026-10-02T01:34:35Z"
     },
     {
       "spec": "state-library.openapi.v1",
       "file": "state-library.kye-tool",
       "verbose_file": "state-library.kye-tool.verbose",
+      "seal_file": "state-library.kye-tool.seal.json",
+      "verbose_seal_file": "state-library.kye-tool.verbose.seal.json",
       "source_sha256": "e69b7dd2c56c8814f10a1b5b6e0e8923d0be5a0b381ba43a652bdf2d66fce0aa",
-      "pack_sha256": "94141369de86941706e7d47e2ef5e1883d33cd1674c4988c925bbab2757a5b5e",
+      "pack_sha256": "b29d328d874cd56c2bcd87efb41819a0ea84cd264ef8f538bf8b2059a823c13d",
       "bytes": {
         "source_canonical_json": 5225,
-        "pack": 589,
-        "ratio_pct": 11.27
+        "pack": 695,
+        "ratio_pct": 13.3
       },
-      "kid": "kye:key:agent-tool-signing:dev",
-      "compiled_at": "2026-08-03T14:33:37Z"
+      "kid": "kye:key:agent-tool-signing:2026Q4",
+      "compiled_at": "2026-10-02T01:34:35Z"
     },
     {
       "spec": "state.openapi.v1",
       "file": "state.kye-tool",
       "verbose_file": "state.kye-tool.verbose",
+      "seal_file": "state.kye-tool.seal.json",
+      "verbose_seal_file": "state.kye-tool.verbose.seal.json",
       "source_sha256": "2ead8b8197153a7840b0d1d733d6db515c84e31141333a5a7d06b113e3e9591a",
-      "pack_sha256": "2bb48cab96fbe973d1dc80d191ac93d44a9726497828f87b647543907f930bfe",
+      "pack_sha256": "fae17920d2ba163e53c3bfcee8a6c0636c9f5eff1a7be4fff0ede8f42fca8135",
       "bytes": {
         "source_canonical_json": 8980,
-        "pack": 1320,
-        "ratio_pct": 14.7
+        "pack": 1418,
+        "ratio_pct": 15.79
       },
-      "kid": "kye:key:agent-tool-signing:dev",
-      "compiled_at": "2026-08-03T14:33:37Z"
+      "kid": "kye:key:agent-tool-signing:2026Q4",
+      "compiled_at": "2026-10-02T01:34:35Z"
     }
   ]
 }

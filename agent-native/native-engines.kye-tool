@@ -1,9 +1,10 @@
 @kye-tool v1
 @spec native-engines.openapi.v1
 @source-sha256 2a1e5400018109c44f57760147b3db9288b7d7963a50994ea858df23ca9f1fe1
-@compiled-at 2026-08-03T14:33:37Z
-@kid kye:key:agent-tool-signing:dev
-@sig DEV-NOT-FOR-PRODUCTION
+@compiled-at 2026-10-02T01:34:35Z
+@kid kye:key:agent-tool-signing:2026Q4
+@sig egp8yHtvM_R1wUMj3zLUysgoJoUMWQQhtWPvdnWK1_FeSGxTKXG9T-lKy1_xxtDApP14AyjBF_8dpS-Uv5zsBA
+@seal native-engines.kye-tool.seal.json
 @base https://api.kyeprotocol.com
 @auth bearer tenant-token
 @endpoints 12

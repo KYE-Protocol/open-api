@@ -1,9 +1,10 @@
 @kye-tool v1
 @spec consultant-programme.openapi.v1
 @source-sha256 e78b9fad38af2d3da459069e51ecd266bd5d2d49743eb7686f49cc442cb0d5d5
-@compiled-at 2026-08-03T14:33:37Z
-@kid kye:key:agent-tool-signing:dev
-@sig DEV-NOT-FOR-PRODUCTION
+@compiled-at 2026-10-02T01:34:35Z
+@kid kye:key:agent-tool-signing:2026Q4
+@sig Aq47oRWM3jI53LWwDcLai1IbahKa6xcrCgjHSxtCZhbgXgYnE7nnOL_hRKyitE251VJutpp8jI4oWYkWZ7q1Bg
+@seal consultant-programme.kye-tool.verbose.seal.json
 @base https://admin.kyeprotocol.com
 @auth bearer JWT
 @endpoints 37
