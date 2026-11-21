@@ -934,6 +934,166 @@ paths:
         "200": { description: "Proposal rows (proposal_id, actor_id, action_type, target_system, risk_level, approval_mode, state, proposed_at, decided_at, decided_by) plus kpi" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
+  /action-approvals/{id}/approve:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string }, description: "The proposal_id of the held action" }
+    post:
+      operationId: app-post-action-approval-approve
+      summary: Approve a held action as a second principal
+      description: >
+        The signed-in tenant member approves a pending action proposal. The
+        approver must not be the requester and must hold an active decision
+        right with the `approve` stage. The act is decided by the Decision
+        Engine and carries its own evidence pack; when the proposal's approval
+        mode is satisfied the held decision is resumed and its final verdict is
+        returned. An API key cannot approve.
+      tags: [Approvals]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: { type: string, maxLength: 2000 }
+      responses:
+        "200": { description: "approval{schema kye.governedui.approval.v1, approval_id, decision_id, evidence_pack_id}, the proposal's new state, and the resumed decision when quorum was met" }
+        "403": { description: "approval_requires_a_signed_in_approver, approver_holds_no_decision_right or approver_act_refused (with reason_code, decision_id, evidence_pack_id)" }
+        "404": { description: proposal_not_found }
+        "409": { description: "proposal_expired, proposal_not_pending or approver_already_acted" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /action-approvals/{id}/reject:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string }, description: "The proposal_id of the held action" }
+    post:
+      operationId: app-post-action-approval-reject
+      summary: Reject a held action
+      description: >
+        The signed-in tenant member rejects a pending action proposal, under the
+        same decision-right and engine rules as approval. A rejection closes the
+        proposal; the held decision is never resumed.
+      tags: [Approvals]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: { type: string, maxLength: 2000 }
+      responses:
+        "200": { description: "approval{schema kye.governedui.approval.v1, approval_id, decision_id, evidence_pack_id} and the proposal state rejected" }
+        "403": { description: "approval_requires_a_signed_in_approver, approver_holds_no_decision_right or approver_act_refused" }
+        "404": { description: proposal_not_found }
+        "409": { description: "proposal_expired, proposal_not_pending or approver_already_acted" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /decision-rights:
+    get:
+      operationId: app-get-decision-rights
+      summary: List the tenant's decision rights
+      description: >
+        The decision rights held in this tenant (holder, decision class, stages,
+        effective and expiry dates, status) — who may approve a held action.
+      tags: [Approvals]
+      responses:
+        "200": { description: "tenant_id, count and decision_rights[]" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-decision-right-grant
+      summary: Grant the approve right to a tenant member
+      description: >
+        An administrator of the tenant grants a holder the `approve` stage of
+        the governed-action decision class. The grant is decided by the
+        Decision Engine and carries its own evidence pack. A right expires after
+        `ttl_days` (1–365, default 365).
+      tags: [Approvals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [holder_entity_id]
+              properties:
+                holder_entity_id: { type: string, description: "A kye: URN naming the holder" }
+                role_label: { type: string, maxLength: 80 }
+                ttl_days: { type: integer, minimum: 1, maximum: 365, default: 365 }
+      responses:
+        "201": { description: "decision_right{id, holder_entity_id, decision_class, stages, effective_from, expires_at, status} with the grant's decision_id and evidence_pack_id" }
+        "400": { description: "invalid_json or holder_not_kye_urn" }
+        "403": { description: "administrator_role_required or decision_right_grant_refused" }
+        "409": { description: holder_already_holds_right }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /evidence-packs/{id}/seal:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: app-post-evidence-pack-seal
+      summary: Seal a window evidence pack
+      description: >
+        Hashes the window pack's manifest of stored decision packs and asks the
+        Decision Engine to decide `evidence_pack.seal` over that hash, so the
+        sealed pack is verifiable from the published public key. A sealed pack
+        is never sealed again.
+      tags: [Evidence]
+      responses:
+        "200": { description: "pack{id, window, status sealed, sealed_at, sha256, actions} with the sealing decision's decision_id and evidence_pack_id" }
+        "403": { description: seal_refused }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: already_sealed }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /rule-packs:
+    get:
+      operationId: app-get-rule-packs
+      summary: The rule-pack catalogue and what this tenant has enabled
+      tags: [Policy]
+      responses:
+        "200": { description: "tenant_id, enabled[], history[] and catalogue[] (each pack with whether the engine can evaluate all of its rules)" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: app-post-rule-pack-enable
+      summary: Enable a rule pack or sector pack for this tenant
+      description: >
+        A governed act: the Decision Engine decides the enablement and it
+        carries its own evidence pack. From the next request on, the tenant
+        policy compiler composes the enabled packs' rules into the policy set
+        the engine reads. A pack whose rules the engine cannot all evaluate
+        cannot be enabled.
+      tags: [Policy]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pack_id]
+              properties:
+                pack_id: { type: string }
+      responses:
+        "200": { description: "the pack's new state with the decision_id and evidence_pack_id" }
+        "400": { description: "invalid_json or pack_id_required" }
+        "403": { description: rule_pack_enable_refused }
+        "404": { description: pack_not_in_catalogue }
+        "409": { description: "pack_not_enforceable or already_enabled" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      operationId: app-delete-rule-pack
+      summary: Disable a rule pack for this tenant
+      tags: [Policy]
+      parameters:
+        - { name: pack_id, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "the pack's new state with the decision_id and evidence_pack_id" }
+        "400": { description: pack_id_required }
+        "403": { description: rule_pack_disable_refused }
+        "404": { description: pack_not_in_catalogue }
+        "409": { description: not_enabled }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
   # ── PDP action history ──────────────────────────────────────────────────────
   /actions:
     get:
