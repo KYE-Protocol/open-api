@@ -94,6 +94,35 @@ components:
           schema: { $ref: "#/components/schemas/RateLimitedResponse" }
 
 paths:
+  /api/_internal/comms-send-probe:
+    post:
+      operationId: site-post-api-internal-comms-send-probe
+      summary: End-to-end outbound email proof through the production path (operator-only)
+      description: |
+        Asks the comms engine, over the same signed service binding every
+        production caller uses, to send one real email to the info mailbox,
+        proving the Pages → comms engine → mail sender → Cloudflare Email
+        Sending path. Gated by the `HEALTHCHECK_INTERNAL_TOKEN` shared secret
+        and fails closed when it is not configured. A successful run sends a
+        real email; the heartbeat cadence bounds that to four a day.
+      tags: [Internal]
+      x-kye-source-file: public/site/functions/api/_internal/comms-send-probe.js
+      security:
+        - HealthcheckBearer: []
+      responses:
+        "200":
+          description: The engine accepted and sent the probe
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  dispatch_id: { type: [string, "null"] }
+                  sent: { type: [boolean, "null"] }
+        "401": { description: unauthorized }
+        "502": { description: "dispatch_failed (or the engine's own error) with its status" }
+
   /api/_internal/healthcheck-workers:
     get:
       operationId: site-get-api-internal-healthcheck-workers
@@ -293,6 +322,100 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
         "429": { $ref: "#/components/responses/RateLimited" }
 
+  /api/forms/{form}:
+    parameters:
+      - name: form
+        in: path
+        required: true
+        description: >-
+          A form id of the retired kye-web Worker. Thirteen map onto this
+          site's own handlers — demo-request → /api/engage-access,
+          pilot-apply → /api/audit-pilot, poc-apply → /api/v1/poc/apply,
+          contact → /api/contact, partner → /api/partner-apply,
+          foundry-apply, trainer-apply, auditor-onboard, consultant-lead,
+          venture-studio-apply, expert-review, dsar → the endpoint of the
+          same name, events-subscribe → /api/report-subscribe. product-path,
+          connector and event-rsvp answer 410.
+        schema: { type: string, pattern: "^[a-z-]+$" }
+    get:
+      operationId: site-get-api-forms-form
+      summary: Self-description of the handler a legacy form id maps to
+      description: |
+        The form endpoint the kye-web Worker answered on the apex from
+        2026-10-01 until its retirement. Every request is answered by the
+        canonical handler the form id maps to (see the `form` parameter); this
+        path re-implements no form. GET returns that handler's own
+        self-description.
+      tags: [LeadCapture]
+      x-kye-source-file: public/site/functions/api/forms/[form].js
+      responses:
+        "200":
+          description: The mapped handler's self-description (its own GET response)
+          content:
+            application/json:
+              schema: { type: object }
+        "404":
+          description: Not a form id the retired Worker ever served
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "410":
+          description: A form only the retired Worker served (product-path, connector, event-rsvp), with the reason
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  error: { type: string, enum: [gone] }
+                  reason: { type: string }
+    post:
+      operationId: site-post-api-forms-form
+      summary: Submit a form under its legacy kye-web id (delegates to the canonical handler)
+      description: |
+        Delegated, unchanged, to the handler the form id maps to: the request
+        body, validation, rate limiting, comms dispatch, evidence and responses
+        are that handler's (documented on its own path in this spec).
+      tags: [LeadCapture]
+      x-kye-source-file: public/site/functions/api/forms/[form].js
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The body of the mapped handler.
+      responses:
+        "200":
+          description: The mapped handler's success response
+          content:
+            application/json:
+              schema: { type: object }
+        "400":
+          description: The mapped handler's validation failure
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Not a form id the retired Worker ever served
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "405":
+          description: The mapped handler does not accept this method
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "410":
+          description: A form only the retired Worker served, with the reason
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [false] }
+                  error: { type: string, enum: [gone] }
+                  reason: { type: string }
   /api/contact:
     get:
       operationId: site-get-api-contact
